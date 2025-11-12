@@ -1,0 +1,47 @@
+---
+title: "human_visual_specific"
+author: "Julia Malnak"
+date: "2025-09-22"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Code for visualizing figure 4c
+The figure comes from the human_spec.py file and is the results saved from
+positve-negative set, where the sets are defined as human prevalent or prevalent in non-human.
+- means present in non-human and + means present in human
+
+### Loading in the libraries and data
+```{r}
+library(tidyverse)
+df <- read_csv("../intermediate_files/prevalence_change_analysis.csv") %>% 
+  rename(family= "...1")
+# filter if the row is 0
+df <- df %>% 
+  rowwise() %>%
+  mutate(sum_prev=sum(c_across(-family), na.rm = TRUE)) %>%
+  filter(sum_prev > 0) %>%
+  select(-sum_prev)
+
+```
+### Show the data as a heatmap
+```{r}
+library(pheatmap)
+mat <- df %>%
+  select(-"27", -"2170") %>% # these were not strongly enriched features
+  column_to_rownames("family") %>%
+  as.matrix()
+# setting the colors
+col <- colorRampPalette(c("#075AFFFF", "white","#FF0000FF"))(100)
+breaks_list <- seq(-1, 1, length.out = 101)
+pheatmap(mat,
+         color = col,
+         breaks=breaks_list)
+```
+
+

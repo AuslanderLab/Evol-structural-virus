@@ -1,0 +1,350 @@
+---
+title: "human_analysis"
+author: "Julia Malnak"
+date: "2025-07-25"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(pROC)
+library(broom)
+library(paletteer)
+library(pheatmap)
+```
+
+## Looking at the distribution of human viruses across families to pick k
+
+```{r}
+hu1<-read_csv("../intermediate_files/human_included_viruses.csv", col_names = c("species")) %>% pull(species)
+hu2<-read_csv("../intermediate_files/human_infecting_viruses_ncbi.csv", col_names = c("species")) %>% pull(species)
+human<-c(hu1,hu2)
+families<- read_tsv("../intermediate_files/family_species.tsv") %>% mutate(human=ifelse(species %in% human,1, 0))
+```
+```{r}
+families %>% 
+  distinct() %>%
+  group_by(family) %>%
+  mutate(human_viruses=sum(human)) %>% 
+  ungroup() %>%
+  filter(human==1) %>%
+  select(family,human_viruses) %>%
+  drop_na() %>%
+  mutate(family = fct_reorder(family, human_viruses)) %>%
+  ggplot(mapping=aes(x=family))+
+  geom_histogram(stat="count", fill="black")+
+  geom_hline(yintercept = 5, color="red")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+## Analyze the knn performance
+```{r}
+# filter out families with only non-human viruses or where it was difficult to automate host
+families <- families %>% select(-human)
+```
+
+
+```{r}
+process_knn_df<-function(df,k)
+{
+   # preprocessing df
+  df<- df %>%
+  rename(known_class=known_taxa,
+         predicted_class=predicted_taxa) %>%
+  distinct() %>%
+  left_join(families, by="species") %>%
+  distinct() %>%
+  mutate(prob=ifelse(predicted_class=="Human", score, 1-score)) %>%
+  mutate(binary_class=ifelse(known_class=="Human",1,0)) %>%
+  group_by(family_name) %>%
+  mutate(human_class=sum(binary_class)) %>%
+  filter(human_class > k) %>% # filter out families that did not get filtered out in the script
+  ungroup() %>%
+  select(-human_class)
+  return(df)
+}
+```
+
+```{r}
+# load in the results from each k
+knn_3<-read_csv("../intermediate_files/human_knn/knn_3/human_results_knn.csv") %>% process_knn_df(5)
+knn_5<- read_csv("../intermediate_files/human_knn/knn_5/human_results_knn.csv") %>% process_knn_df(5)
+knn_7<- read_csv("../intermediate_files/human_knn/knn_7/human_results_knn.csv") %>% process_knn_df(7)
+
+```
+
+
+```{r}
+# function where I get all the auc roc and bind to a dataframe then plot per family
+plot_all_auc<- function(df)
+{
+  family<- df %>% pull(family_name) %>% unique()
+  family_vec<-c()
+  tpr<-c()
+  fpr<-c()
+  auc_vec<-c()
+  for (i in family)
+  {
+    family_sub<- df %>% filter(family_name==i)
+    prob<-family_sub %>% pull(prob)
+    class<-family_sub %>% pull(binary_class)
+    roc_result<-roc(class, prob, direction="<") 
+    # adding to tpr and fpr vector
+    tpr<-c(tpr,roc_result$sensitivities)
+    fpr<-c(fpr,(1-roc_result$specificities))
+    # adding to the auc_vector
+    auc_res<-auc(roc_result)
+    auc_vec<-c(auc_vec, rep(auc_res, times=length(roc_result$sensitivities)))
+    # adding to the family vector
+    fam_rep<-rep(i, times=length(roc_result$sensitivities))
+    family_vec<-c(family_vec,fam_rep)
+  }
+  result<-tibble(family=family_vec,
+                  auc=auc_vec,
+                  tpr=tpr,
+                  fpr=fpr)
+  col<-c(paletteer_d("ggthemes::Jewel_Bright"), paletteer_d("MoMAColors::Klein"), paletteer_d("tvthemes::Opal"))
+  sub_col<-col[1:length(unique(result$family))]
+  # PLOT the auc curves
+  auc_curve<-result %>%
+    mutate(family_label=paste0(family, " (AUC=", round(auc,2), ")")) %>%
+    ggplot(mapping=aes(x=fpr, y=tpr, group=family, color=family_label))+
+    geom_point()+
+    geom_line()+
+    scale_color_manual(values=sub_col)+
+    geom_abline(slope=1, color="red", linetype="dashed")+
+    theme_classic()+
+    xlab("1-Specificity")+
+    ylab("Sensitivity")+
+    labs(color="Family AUC")
+  
+  # plot as barplot
+  bar<-result %>%
+    select(family,auc) %>%
+    distinct() %>%
+    mutate(family = reorder(family, -auc)) %>%
+    ggplot(mapping=aes(x=family, y=auc))+
+    geom_bar(stat="identity", color="white", linewidth=0.25)+
+    theme_classic()+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size=10),
+         axis.text.y = element_text(angle = 90, hjust = 0.5))+
+    ylab("AUC-ROC")+
+    xlab("Family")
+  # show the plots
+  print(auc_curve)
+  print(bar)
+  print ("Number of families with auc greater than 0.7")
+  print(result %>% select(family,auc) %>% distinct() %>% filter(auc > 0.7))
+}
+```
+# Main Figure 4E, Supplementary Figures 7I,J
+```{r}
+plot_all_auc(knn_3)
+plot_all_auc(knn_5)
+plot_all_auc(knn_7)
+```
+
+
+```{r}
+##accuracy functions
+accuracy<-function(knn_df)
+{
+  knn_acc<- knn_df %>% group_by(family_name) %>%
+  summarise(correct=sum(known_class==predicted_class),
+         overall=n()) %>%
+  mutate(accuracy=correct/overall) %>%
+  mutate(family_name = reorder(family_name, -accuracy))
+  
+  return(knn_acc)
+}
+```
+
+```{r}
+knn_results_5<- accuracy(knn_5)
+knn_results_7 <- accuracy(knn_7)
+plot_accuracy<-function(knn)
+{
+  knn %>%
+    ggplot(mapping=aes(x=family_name, y=accuracy))+
+    geom_bar(stat="identity", color="white", linewidth=0.25)+
+    theme_classic()+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size=10),
+         axis.text.y = element_text(angle = 90, hjust = 0.5))+
+    ylab("Accuracy")+
+    xlab("Family")
+}
+plot_accuracy(knn_results_5)
+plot_accuracy(knn_results_7)
+```
+
+### Looking for underlying genes between nearest neighbors (that are not shared between other members)
+```{r}
+count_df<- read_csv("../intermediate_files/structure_df.csv")%>% pivot_longer(cols=-cluster_ID,names_to="species", values_to = "Present" )%>%
+  filter(Present==1) 
+```
+
+Plot for visualization the species present
+```{r}
+
+human_specific<- function(df, fam_name)
+{
+### Preparing the dataframe
+fam<- df%>% filter(family %in% fam_name)
+species_of_interest<- fam %>% pull(species)
+##### Plotting the family heatmap ##########
+
+# use outside count_df so it's not loaded every time
+mat<- count_df %>%
+  filter(species %in% species_of_interest) %>%
+  filter(Present==1) %>%
+  pivot_wider(names_from = "species", values_from = "Present", values_fill = 0) %>%
+  column_to_rownames("cluster_ID") %>%
+  as.matrix() 
+# get factor order
+order_viruses<- colnames(mat)
+human_annotation<-fam %>% 
+  mutate(classification=ifelse(predicted_class==known_class, "Correct", "Incorrect")) %>%
+  select(species, known_class, classification)%>%
+  distinct() %>%
+  arrange(factor(species, levels = order_viruses)) %>%
+  select(-species) %>%
+  as.data.frame() 
+
+# setting the rownames for pheatmap
+rownames(human_annotation)<-order_viruses
+
+# setting up the colors for the heatmap
+# main colors
+col<-colorRampPalette(c("white","#011C40FF"))(100)
+annotation_colors <- list(
+  known_class = c("Human" = "#0F85A0FF", "Non-human" = "#EDD746FF"),
+  classification = c("Correct" = "#ED8B00FF", "Incorrect" = "#DD4124FF")
+)
+# classification and class colors
+pheatmap(mat,
+         color=col,
+         show_rownames = FALSE,
+         annotation_col=human_annotation,
+         annotation_colors = annotation_colors,
+         border_color = "black")
+### Doing an overall geom_tile plot of interesting features ########
+
+# separate into four factors
+fam<- fam %>%
+  mutate(class=case_when(
+    known_class=="Human" & predicted_class=="Human" ~"Human-Human",
+    known_class=="Human" & predicted_class=="Non-human" ~ "Human-Nonhuman",
+    known_class=="Non-human" & predicted_class=="Human" ~ "Nonhuman-Human",
+    known_class=="Non-human" & predicted_class=="Non-human" ~ "Nonhuman-Nonhuman"
+  )) %>%
+  group_by(class) %>%
+  mutate(class_size=n()) %>%
+  ungroup() %>%
+  select(species, class, class_size) %>%
+  left_join(count_df, by="species") %>%
+  group_by(class,cluster_ID) %>%
+  mutate(feat_count=(n())/class_size) %>%
+  ungroup()
+# filter for interesting features
+clust_interest<- fam %>% 
+  pivot_wider(names_from = class, values_from = feat_count, values_fill = 0) %>% 
+  filter(!(`Human-Human`== 0 &
+               `Human-Nonhuman`== 0 & 
+               `Nonhuman-Human` ==0 & 
+               `Nonhuman-Nonhuman`> 0)) %>%
+  pull(cluster_ID)
+tmp_fam <-fam %>% filter(cluster_ID %in% clust_interest) 
+
+pal<-c("lightgrey",paletteer_d("MoMAColors::Althoff"))
+continuous_pal=colorRampPalette(pal)(100)
+h<-tmp_fam %>%
+  select(class,cluster_ID, feat_count) %>%
+  complete(class, cluster_ID, fill = list(feat_count = 0)) %>%
+  mutate(cluster_ID=as.factor(cluster_ID)) %>%
+  ggplot(mapping=aes(x=class, y=cluster_ID, fill=feat_count))+
+    geom_tile(color="black", linewidth = 0.1)+
+  scale_fill_gradientn(colors=continuous_pal)+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  coord_fixed(ratio = 0.3)
+print(h)
+### now making a dataframe of interesting elements and sending back to user
+fam_long<- fam %>% 
+  select(-species, -class_size) %>%
+  distinct() %>%
+  pivot_wider(names_from = class, values_from = feat_count, values_fill = 0) 
+human_only<- fam_long %>% filter(`Human-Human`> 0 &
+                                   `Human-Nonhuman`==0 & 
+                                   `Nonhuman-Human`==0 & 
+                                   `Nonhuman-Nonhuman`==0) %>%
+  mutate(analysis="human-correct-class")
+
+human_and_misclass_human<-fam_long %>% filter(`Human-Human`> 0 &
+                                                `Human-Nonhuman`>0 & 
+                                                `Nonhuman-Human`==0 & 
+                                                `Nonhuman-Nonhuman`==0)%>%
+  mutate(analysis="all-human")
+human_and_misclass_non_human<-fam_long %>% filter(`Human-Human`> 0 &
+                                                    `Nonhuman-Human`>0 &
+                                                `Nonhuman-Nonhuman`==0) %>%
+  mutate(analysis="misclassified-nonhuman")
+important_df <- rbind(human_only, human_and_misclass_human) %>% rbind(human_and_misclass_non_human) %>%
+  pivot_longer(cols=matches("-"), names_to = "class", values_to = "feat_count") %>% 
+  select(cluster_ID, analysis, feat_count, class) %>%
+  distinct()
+return(important_df)
+
+}
+
+```
+
+
+## Supplementary Figures 5 B,C,D
+Looking for human specific clusters here
+```{r}
+family_of_interest<-c("Anelloviridae")
+anello<-human_specific(knn_5,family_of_interest)
+family_of_interest<-c("Papillomaviridae")
+pap<-human_specific(knn_5,family_of_interest)
+family_of_interest<-c("Picornaviridae")
+pic<-human_specific(knn_5,family_of_interest)
+
+test<- knn_5 %>% 
+  filter(family_name =="Papillomaviridae")%>%
+  mutate(class=case_when(
+    known_class=="Human" & predicted_class=="Human" ~"Human-Human",
+    known_class=="Human" & predicted_class=="Non-human" ~ "Human-Nonhuman",
+    known_class=="Non-human" & predicted_class=="Human" ~ "Nonhuman-Human",
+    known_class=="Non-human" & predicted_class=="Non-human" ~ "Nonhuman-Nonhuman"
+  ))%>%
+  group_by(class) %>%
+  mutate(class_size=n()) %>%
+  ungroup() %>%
+  select(species, class, class_size) %>%
+  left_join(count_df, by="species") %>%
+  group_by(class,cluster_ID) %>%
+  mutate(feat_count=(n())/class_size) %>%
+  ungroup()
+
+```
+
+
+```{r}
+# human but classified correctly
+anello_human<- anello %>% filter(analysis=="human-correct-class") %>% select(-class) %>% filter(feat_count>0) %>% distinct()
+pap_human<- pap %>% filter(analysis=="human-correct-class")%>% select(-class) %>% filter(feat_count>0) %>% distinct()
+pic_human<- pic %>% filter(analysis=="human-correct-class")%>% select(-class) %>% filter(feat_count>0) %>% distinct()
+# all human
+anello_human_only<- anello %>% filter(analysis=="all-human") %>% select(-class) %>% filter(feat_count>0) %>% distinct()
+pap_human_only<- pap %>% filter(analysis=="all-human")%>% select(-class) %>% filter(feat_count>0) %>% distinct()
+pic_human_only<- pic %>% filter(analysis=="all-human")%>% select(-class) %>% filter(feat_count>0) %>% distinct()
+```
+

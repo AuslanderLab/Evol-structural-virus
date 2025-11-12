@@ -1,0 +1,140 @@
+---
+title: "struct_vs_trad"
+author: "Julia Malnak"
+date: "2025-03-27"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(hexbin)
+library(RColorBrewer)
+library(tidyverse)
+library(ape)
+library(ggtree)
+library(ggtreeExtra)
+library(paletteer)
+```
+
+# First analysis is the structural jaccard vs the nucleotide similarity
+
+```{r}
+# reading in the dataframes
+jaccard<-read_csv("../intermediate_files/species_jaccard.csv") %>% select(-intersection, -union)
+families_taxid_map<- read_tsv("../intermediate_files/family_species.tsv") %>% distinct()
+adeno_family<- families_taxid_map %>% filter(family=="Adenoviridae")
+papillo_family<-families_taxid_map %>% filter(family=="Papillomaviridae")
+corona_family<-families_taxid_map %>% filter(family=="Coronaviridae")
+pox_family<-families_taxid_map %>% filter(family=="Poxviridae")
+```
+
+```{r}
+dist_family<-function(df,family_df, save_path)
+{
+  test<-df%>% 
+  filter(taxon1 %in% family_df$species) %>% 
+  filter(taxon2 %in% family_df$species) %>% 
+  select(taxon1, taxon2, `jaccard index`) %>% 
+  distinct() %>%
+  pivot_wider(names_from=taxon1, values_from="jaccard index")
+ 
+  return(test)
+  
+}
+```
+
+```{r}
+ad<-dist_family(jaccard,adeno_family)
+pap<-dist_family(jaccard,papillo_family)
+corona<-dist_family(jaccard,corona_family)
+pox<-dist_family(jaccard,pox_family)
+```
+
+## Tree building for these families
+```{r}
+make_matrix<-function(ad_df_mat)
+{
+  ad_df_mat<-ad_df_mat %>% column_to_rownames("taxon2")%>% as.matrix()
+  ad_df_dist<-dist(ad_df_mat)
+  hclust_avg <- hclust(ad_df_dist, method = 'average')
+  hclust_avg$labels=rownames(ad_df_mat)
+  phylo_tree<-as.phylo(hclust_avg)
+  return(phylo_tree)
+
+}
+visualize<-function(phylo_obj)
+```
+## Supplementary Figure 6A
+```{r}
+ad_tree<-make_matrix(ad)
+adeno_family$label <- adeno_family$species
+family_species_meta <- adeno_family %>%
+  dplyr::group_by(label) %>%
+  dplyr::summarize(family = paste(unique(family), collapse = ", "))
+
+ggtree(ad_tree) +
+  geom_tiplab(size=3)
+```
+## Supplementary Figure 6B
+```{r}
+cor_tree<-make_matrix(corona)
+corona_family$label <- corona_family$species
+family_species_meta <- corona_family %>%
+  dplyr::group_by(label) %>%
+  dplyr::summarize(family = paste(unique(family), collapse = ", "))
+
+ggtree(cor_tree) +
+  geom_tiplab(size=3)
+```
+
+## Main Figure 4A
+Looking into the redondovirus family and it's relation to other species
+```{r}
+# loading in the non-zero jaccard index species with relationship to redondovirus
+
+jaccard_fam<- jaccard %>% 
+  right_join(families_taxid_map, by=c("taxon1"="species")) %>% 
+  rename(family1=family) %>%
+  right_join(families_taxid_map, by=c("taxon2"="species")) %>% 
+  rename(family2=family) %>%
+  drop_na() %>%
+  filter(family1=="Redondoviridae") %>%
+  filter(`jaccard index` > 0) %>%
+  pull(taxon2)
+redondo<- jaccard %>%
+  drop_na() %>%
+  filter(taxon1 %in% jaccard_fam) %>%
+  filter(taxon2 %in% jaccard_fam) %>%
+  distinct() %>%
+  pivot_wider(names_from=taxon1, values_from="jaccard index")
+fam_species_red<-families_taxid_map%>% distinct() %>% filter(species %in% redondo$taxon2) %>% relocate(species)
+# building the tree)
+phylo_tree<-make_matrix(redondo)
+# visualization of the tree
+fam_species_red$label <- fam_species_red$species
+fam_species_red <- fam_species_red %>% distinct()
+family_species_meta <- fam_species_red |>
+  dplyr::group_by(label) |>
+  dplyr::summarize(family = paste(unique(family), collapse = ", "))
+
+ladderize(phylo_tree)
+
+ggtree(phylo_tree, layout = "circular", size = 0.5, open.angle = 20) %<+% family_species_meta +
+  geom_fruit(
+    geom = geom_point,
+    mapping = aes(y = label, color = family),
+    size = 0.55,
+    offset = 0.015
+  ) +
+  scale_color_paletteer_d("MoMAColors::Klein")
+
+  xlim_tree(0.01)
+```
+
+

@@ -1,0 +1,285 @@
+---
+title: "conserved_gene_analysis"
+author: "Julia Malnak"
+date: "2025-07-03"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(paletteer)
+library(pheatmap)
+library(reshape2)
+```
+
+# Shared similarity analysis
+Loading and preprocessing the data
+```{r}
+str_sim<- read_csv("../intermediate_files/species_jaccard.csv") %>%
+  select(-union, -intersection) %>%
+  rename(jaccard_similarity=`jaccard index`) %>%
+  filter(taxon1!="Staphylococcus_aureus") %>%
+  filter(taxon2!="Staphylococcus_aureus")
+family_anno<-read_tsv("../intermediate_files/family_species.tsv") %>% drop_na() %>% distinct() %>%
+  group_by(family) %>%
+  mutate(mems=n()) %>%
+  ungroup
+```
+
+Join the family with the df.
+```{r}
+str_sim<- str_sim %>% inner_join(family_anno, by=c("taxon1"="species"))%>% 
+  rename(family1=family) %>%
+  inner_join(family_anno, by=c("taxon2"="species")) %>% 
+  rename(family2=family) 
+```
+
+
+
+## Looking for which nearest neighbors are not always from the within family. 
+This is essentially a heatmap of counts of who the nearest neighbor is (top 1)
+```{r}
+str_sim_grouped<- str_sim %>%
+  group_by(taxon1) %>%
+  filter(min_rank(desc(jaccard_similarity)) <= 1) %>%
+  ungroup()
+str_sim_grouped_no_match<- str_sim_grouped %>%
+  filter(jaccard_similarity!=0)
+# now let's only include things that has a nearest neighbor that's not in its family
+viruses_of_interest<- str_sim_grouped_no_match %>%
+  filter(family1!=family2) %>%
+  pull(family1)
+virus_of_interest<- str_sim_grouped_no_match %>%
+  filter(family1!=family2) %>%
+  select(taxon1, taxon2) %>%
+  as.list() %>%
+  unlist() %>%
+  unique()
+# sub df for figure
+counts_cross_match <- str_sim_grouped_no_match %>%
+  filter(family1 %in% viruses_of_interest) %>%
+  select(family1,family2) %>%
+  group_by(family1,family2) %>%
+  summarise(counts=n()) %>%
+  ungroup()
+```
+## Figure 3A
+```{r}
+family_size<- family_anno %>% select(family, mems) %>% distinct()
+### normalization of the dataframe
+prep_mat<- counts_cross_match %>%
+  mutate(counts=log10(counts+1)) %>%
+  pivot_wider(names_from = family2, values_from = counts, values_fill = 0) %>%
+  column_to_rownames("family1") %>%
+  as.matrix()
+
+colors_continuous <- colorRampPalette(paletteer_d("MoMAColors::Althoff"))(100)
+
+# Make sure 0 maps to white and rest uses the gradient
+color_vector <- c("white", colors_continuous)
+
+
+# heatmap function
+pheatmap(prep_mat,
+         color=color_vector, 
+         legend = TRUE)
+```
+
+
+Now look at the 11 most close neighbors!!
+```{r}
+# eliminate families without 11 neighbors
+
+str_sim_grouped_11<- str_sim %>%
+  filter(mems.x >11) %>%
+  group_by(taxon1) %>%
+  filter(min_rank(desc(jaccard_similarity)) <= 11) %>%
+  ungroup()
+# now going to calculate the cases in which a misclassification would be mades
+str_sim_grouped_11 <- str_sim_grouped_11 %>%
+  filter(jaccard_similarity!=0) %>%
+  group_by(taxon1) %>%
+  mutate(total=n()) %>%
+  ungroup() %>%
+  group_by(taxon1, family2) %>%
+  mutate(class=n()) %>%
+  mutate(majority_rules=class/total) %>%
+  ungroup() %>%
+  group_by(taxon1) %>%
+  filter(min_rank(desc(majority_rules)) <= 1) %>%
+  ungroup() %>%
+  select(taxon1,family1, family2) %>%
+  distinct() %>%
+  select(family1,family2) %>%
+  group_by(family1,family2) %>%
+  mutate(counts=n()) %>%
+  ungroup() %>%
+  distinct()
+# now only look at families which are misclassified
+families_interest<- str_sim_grouped_11 %>%
+  filter(family1!=family2) %>%
+  pull(family1)
+#only include viruses that are misclassified at least once
+str_sim_grouped_11 <- str_sim_grouped_11 %>%
+  filter(family1 %in% families_interest)
+```
+
+
+## Supplementary Figure 4A
+```{r}
+prep_mat<- str_sim_grouped_11 %>%
+  mutate(counts = log10(counts + 1)) %>%
+  pivot_wider(names_from = family2, values_from = counts, values_fill = list(counts = 0)) %>%
+  column_to_rownames("family1") %>%
+  as.matrix()
+# heatmap function
+
+# making palette
+my_palette <- paletteer_d("MoMAColors::Ernst") %>% unname()
+color_gradient <- colorRampPalette(c("white", my_palette))(100)
+min_val <- min(prep_mat, na.rm = TRUE)
+max_val <- max(prep_mat, na.rm = TRUE)
+breaks <- seq(0, max_val, length.out = 101)
+#plot
+pheatmap(prep_mat,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = color_gradient,
+         breaks = breaks, cellwidth = 8,
+         cellheight = 9)
+
+```
+
+
+What are these shared genes between families?
+I'm going to import some count results because the matrix is too large to handle in R.
+
+I'm going to subset by genes that are interesting in the other figure!
+```{r}
+species_count_df<- read_csv("../intermediate_files/structure_df.csv")
+```
+
+## Looking at the genes shared between a subset of viruses in the previous heatmap
+```{r}
+shared_subset<- species_count_df %>%
+  select(all_of(c("cluster_ID",virus_of_interest))) %>%
+  rowwise() %>%
+  mutate(total_count=sum(c_across(-cluster_ID))) %>%
+  filter(total_count > 1) 
+```
+
+## Figure 3B
+```{r}
+# plotting results
+# prepping the df
+shared_subset_mat <- shared_subset %>%
+  select(-total_count) %>%
+   column_to_rownames("cluster_ID") %>%
+  as.matrix() %>%
+  t()
+order_viruses<- rownames(shared_subset_mat)
+shared_subset_viruses <- tibble(species=rownames(shared_subset_mat))
+# adding the annotations
+family_annotation<- family_anno %>% 
+  right_join(shared_subset_viruses, by="species")%>%
+  distinct() %>%
+  arrange(factor(species, levels = order_viruses)) %>%
+  arrange(family)
+# order the heatmap in the same way?
+shared_subset_mat <- shared_subset_mat[family_annotation$species, ]
+## adding the 
+family_annotation<- family_annotation %>%
+  select(family) %>%
+  as.data.frame() %>%
+  mutate(family=factor(family))
+rownames(family_annotation)<- rownames(shared_subset_mat)
+family_levels <- levels(family_annotation$family)
+# adding the custom colors
+family_col<- c(paletteer_d("palettetown::bulbasaur"),paletteer_d("palettetown::gloom"))
+ann_cols<- list(family = setNames(family_col[1:length(family_levels)], family_levels))
+# plotting the results
+pheatmap(shared_subset_mat,
+         col=paletteer_d("soilpalettes::crait"),
+         show_rownames = F,
+         annotation_row = family_annotation,
+         cluster_rows = F,
+         cellwidth=8,
+          cellheight=0.7, 
+         annotation_colors = ann_cols)
+```
+
+# Figure 3C
+## Add a Corrplot to see if the there are variables that are correlated in the heatmap?
+```{r}
+
+library(corrplot)
+# correlation
+correlation<-cor(shared_subset_mat, use="pair")
+# pvalue mat using fisher's exact
+c<-rownames(correlation)
+p_mat<-matrix(NA, nrow=length(c), ncol=length(c), dimnames=list(c,c))
+
+p_val_list<-list()
+index_list<-list()
+count<-1
+for (i in seq_along(c)) # loop through and calculate
+{
+  for (j in seq_along(c))
+  {
+    tab<-table(shared_subset_mat[,i], shared_subset_mat[,j])
+    p<- fisher.test(tab)$p.value
+    if (i!=j) # don't include self comparisions
+    {
+      p_val_list[[count]]=p
+      index_list[[count]]=c(i,j)
+      count<- count+1
+    }
+  }
+}
+
+# calculate the adjusted p-values
+p_vals<-unlist(p_val_list)
+adj_p<-p.adjust(p_vals, method="fdr")
+
+# fill in the matrix with the adjusted p-values
+for (idx in seq_along(index_list))
+{
+  i<-index_list[[idx]][1]
+  j<-index_list[[idx]][2]
+  p_mat[i,j]<-adj_p[idx]
+  p_mat[j,i]<-adj_p[idx]
+}
+# fill in NA values for self comparision
+diag(p_mat)<-1
+# transform for sizing
+p_mat<--log10(p_mat)
+
+## visualization of correlation
+p<-melt(p_mat) %>% rename("logq"="value")
+c<-melt(correlation) %>% rename("coeff"="value")
+
+## make the color palette
+pal<-colorRampPalette(paletteer_d("colorBlindness::Blue2Orange10Steps"))(100)
+
+df <- p %>% inner_join(c, by=c("Var1","Var2")) %>%
+  filter(Var1 < Var2) %>%
+  mutate(Var1=as.factor(Var1)) %>%
+  mutate(Var2=as.factor(Var2))
+ggplot(df, aes(x = Var1, y = Var2)) +
+  geom_tile(fill="white", color = "black") +  # boxes
+  geom_point(aes(fill=coeff, size = logq), shape = 21) + # points sized by significance
+  scale_fill_gradientn(colors=pal) +
+  scale_size(range = c(0.5, 6)) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    axis.title = element_blank()
+  ) +
+  labs(fill = "Phi-Correlation", size = "-log(q-value)")
+```

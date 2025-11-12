@@ -1,0 +1,386 @@
+---
+title: "KNN_analysis_vs_amino_acids"
+author: "Julia Malnak"
+date: "2025-06-05"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(paletteer)
+library(ggrastr)
+library(patchwork)
+library(ComplexHeatmap)
+library(circlize)
+library(RColorBrewer)
+```
+
+## Comparing KNN performance across Structure-based Cluster and Amino-Acid Clusters
+```{r}
+am_knn_3<-read_csv("../intermediate_files/results_knn/knn_result_k_3_amino_acids.csv") 
+am_knn_5<-read_csv("../intermediate_files/results_knn/knn_result_k_5_amino_acids.csv") 
+am_knn_11<-read_csv("../intermediate_files/results_knn/knn_result_k_11_amino_acids.csv")
+str_knn_3<-read_csv("../intermediate_files/results_knn/knn_result_k_3_structure.csv")%>% mutate(k=3) %>% mutate(feature="structure")
+str_knn_5<- read_csv("../intermediate_files/results_knn/knn_result_k_5_structure.csv")%>% mutate(k=5) %>% mutate(feature="structure")
+str_knn_11<-read_csv("../intermediate_files/results_knn/knn_result_k_11_structure.csv")%>% mutate(k=11) %>% mutate(feature="structure")
+```
+
+```{r}
+filter_species<- function(knn_df, shared_species)
+{
+  # in a function in case the code needs to change
+  knn_df<- knn_df %>% filter(species %in% shared_species)
+  return(knn_df)
+}
+```
+
+```{r}
+# make sure they only compared the same set of things
+knn_3_species<- intersect(am_knn_3$species, str_knn_3$species)
+knn_5_species<- intersect(am_knn_5$species, str_knn_5$species)
+knn_11_species<-intersect(am_knn_11$species, str_knn_11$species)
+
+# filter out the species that don't match
+am_knn_3<- filter_species(am_knn_3, knn_3_species)  
+am_knn_5<- filter_species(am_knn_5, knn_5_species)
+am_knn_11<- filter_species(am_knn_11, knn_11_species)
+str_knn_3<- filter_species(str_knn_3, knn_3_species)
+str_knn_5<- filter_species(str_knn_5, knn_5_species)
+str_knn_11<- filter_species(str_knn_11, knn_11_species)
+```
+
+```{r}
+# need to merge to make sure the species tested are the same for both sets
+accuracy<-function(knn_df)
+{
+  knn_acc<- knn_df %>% group_by(known_family) %>%
+  summarise(correct=sum(known_family==predicted_family),
+         overall=n()) %>%
+  mutate(accuracy=correct/overall) %>%
+  mutate(known_family = reorder(known_family, -accuracy))
+  
+  return(knn_acc)
+}
+
+```
+
+```{r}
+# add amino acids
+am_knn_3<-accuracy(am_knn_3)%>% mutate(k=3) %>% mutate(feature="Amino Acid") %>% mutate(run="Amino Acid 3")
+am_knn_5<-accuracy(am_knn_5)%>% mutate(k=5) %>% mutate(feature="Amino Acid") %>% mutate(run="Amino Acid 5")
+am_knn_11<-accuracy(am_knn_11)%>% mutate(k=11) %>% mutate(feature="Amino Acid")%>% mutate(run="Amino Acid 11")
+# add structure
+str_knn_3<-accuracy(str_knn_3) %>% mutate(k=3) %>% mutate(feature="Structure") %>% mutate(run="Structure 3")
+str_knn_5<-accuracy(str_knn_5) %>% mutate(k=5) %>% mutate(feature="Structure") %>% mutate(run="Structure 5")
+str_knn_11<-accuracy(str_knn_11) %>% mutate(k=11) %>% mutate(feature="Structure")%>% mutate(run="Structure 11")
+```
+
+```{r}
+# merge all together
+knn <- am_knn_3 %>% 
+  bind_rows(am_knn_5) %>% 
+  bind_rows(am_knn_11) %>% 
+  bind_rows(str_knn_3) %>%
+  bind_rows(str_knn_5) %>%
+  bind_rows(str_knn_11) 
+```
+
+```{r}
+knn<- knn %>% mutate(k=as.factor(k))
+palette <- paletteer::paletteer_d("rcartocolor::TealRose")
+sub_color<-c(palette[1], palette[length(palette)])
+```
+## Supplementary Figure 3B
+Let's look at the distribution of accuracy
+```{r}
+ggplot(knn, aes(x = k, y = accuracy, color = feature)) +
+  geom_jitter(alpha = 0.5, position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.9)) +
+  geom_boxplot(fill=NA, position = position_dodge(width = 0.9), outliers=FALSE) +
+  theme_classic()+
+  scale_color_manual(values=sub_color, name="Cluster Type")+
+  ylab("Family Accuracy")+
+  xlab("K")
+
+```
+
+
+
+## Figure correlating accuracy to the discrepancy between the structural and amino acid distances
+```{r}
+#loading in the dataframe of interest
+within_family<-read_csv("../intermediate_files/family_amino_acid_structure_distance/within_family_dist.csv") %>%
+  mutate(comparision="within family") 
+between_family<-read_csv("../intermediate_files/family_amino_acid_structure_distance/between_family_dist.csv") %>%
+  mutate(comparision="between family")
+diversity<-read_csv("../intermediate_files/family_amino_acid_structure_distance/family_diversity.csv")
+```
+
+```{r}
+knn_no_na<- knn %>% select(-feature, -k, -correct, -overall) %>% distinct() %>% pivot_wider(names_from = "run", values_from = "accuracy") %>%
+  drop_na()
+knn_subset<- knn_no_na %>% select(known_family,`Structure 11`)
+between_family<- between_family %>% inner_join(knn_subset, by=c("family1"="known_family"))
+within_family<- within_family %>% 
+  inner_join(knn_subset, by=c("family1"="known_family")) %>% 
+  mutate(family2="None") 
+family_comparision<- between_family %>% 
+  rbind(within_family) %>% 
+  rename(Accuracy=`Structure 11`) %>%
+  mutate(jaccard_similarity=1-jaccard_distance_structure) %>%
+  select(-jaccard_distance_structure)
+within_family <- within_family %>%
+  inner_join(diversity, by=c("family1"="family"))
+```
+
+
+# Does the difference in accuracy between amino acid and structure correlate with performance?
+```{r}
+am_mini_11<- am_knn_11 %>% select(known_family, accuracy) %>% rename(amino_acid_accuracy=accuracy)
+str_mini_11<- str_knn_11 %>% select(known_family, accuracy) %>% rename(structure_accuracy=accuracy)
+
+merged_diff <- str_mini_11 %>% inner_join(am_mini_11, by="known_family") %>%
+  inner_join(diversity, by=c("known_family"="family")) %>%
+  mutate(diff_accuracy=amino_acid_accuracy-structure_accuracy) 
+
+merged_diff %>% 
+  ggplot(mapping=aes(x=diff_accuracy, y=diversity))+
+  geom_point()+
+  theme_classic()+
+  xlab("Amino Acid Accuracy- Structural Accuracy")+
+  ylab("Diversity")
+```
+
+## Figure 2E
+```{r}
+# prep dataframe for visualization
+family_comparision<- family_comparision %>%
+  inner_join(am_mini_11, by=c("family1"="known_family")) %>%
+  mutate(diff_acc=amino_acid_accuracy-Accuracy) %>%
+    mutate(family1 = as.factor(family1),                     
+         family1 = fct_reorder(family1, diff_acc))
+```
+
+ Let's stratify this figure into a geom tile and distribution figure
+```{r}
+tile<-family_comparision %>% 
+  select(family1,diff_acc) %>%
+    mutate(acc="Sensitivity") %>%
+  distinct() %>%
+  ggplot(mapping=aes(y=family1, x=acc, fill=diff_acc))+
+  geom_tile(linewidth=0.5, color="black")+
+  scale_fill_gradient2(low="#075AFFFF",
+                          mid="white",
+                          high="#FF6600FF",
+                          midpoint=0)+
+  theme_classic()+
+  coord_fixed(ratio=0.5)+
+  theme(legend.position = "left")
+  
+
+box_p<-family_comparision %>%
+  ggplot(mapping = aes(x=diff_str_am, y=family1))+
+  geom_boxplot(
+     aes(group = interaction(family1, comparision), fill=comparision),
+    position = position_dodge(width = 0.9),
+    outlier.shape = NA, alpha=0.7, linewidth=0.15)+
+  scale_fill_manual(values=c("#046E8FFF","#D44D5CFF"))+
+  theme_classic()+
+  theme(
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(), 
+    axis.ticks.y=element_blank()
+  )+
+  xlab("Jaccard Distance (Structure-Amino Acid)")
+
+# put together using patchwork
+tile +box_p +plot_layout(ncol=2)
+```
+
+
+
+## Looking at all taxonomic levels
+# Benchmarking all taxonomic levels!
+```{r}
+# adding in the knn_results<- 
+genus<-read_csv("../intermediate_files/results_knn/knn_result_k_11_structure_genus.csv") 
+family<-read_csv("../intermediate_files/results_knn/knn_result_k_11_structure.csv") %>% 
+  rename(known_taxa=known_family) %>% 
+  rename(predicted_taxa=predicted_family)
+order<-read_csv("../intermediate_files/results_knn/knn_result_k_11_structure_order.csv")
+class<-read_csv("../intermediate_files/results_knn/knn_result_k_11_structure_class.csv")
+phyla<-read_csv("../intermediate_files/results_knn/knn_result_k_11_structure_phyla.csv")
+
+```
+
+```{r}
+mod_accuracy<-function(knn_df)
+{
+  knn_acc<- knn_df %>% group_by(known_taxa) %>%
+  mutate(correct=sum(known_taxa==predicted_taxa),
+         overall=n()) %>%
+  mutate(accuracy=correct/overall) %>%
+  mutate(known_taxa = reorder(known_taxa, -accuracy)) %>%
+    ungroup() %>%
+    select(species,accuracy)
+  
+  return(knn_acc)
+}
+```
+
+
+```{r}
+genus<-mod_accuracy(genus)
+family<-mod_accuracy(family)
+order<-mod_accuracy(order)
+class<-mod_accuracy(class)
+phyla<-mod_accuracy(phyla)
+```
+
+```{r}
+taxa_guide <- read_tsv("../intermediate_files/taxonomic_levels.tsv") 
+# merge each species accuarcy and rename with the taxonomic level
+taxa_guide <- taxa_guide %>% left_join(phyla, by="species") %>% rename(phylum_accuracy=accuracy)
+taxa_guide <- taxa_guide %>% left_join(family, by="species") %>% rename(family_accuracy=accuracy)
+taxa_guide<- taxa_guide %>% left_join(order, by="species") %>% rename(order_accuracy=accuracy)
+taxa_guide<- taxa_guide %>% left_join(class, by="species") %>% rename(class_accuracy=accuracy)
+taxa_guide<- taxa_guide %>% left_join(genus, by="species") %>% rename(genus_accuracy=accuracy) %>% distinct()
+# tier by phyla, class, order, family, genus
+taxa_guide<- taxa_guide %>% 
+  filter(!is.na(species)) %>% 
+  filter(!if_all(c(phylum_accuracy, class_accuracy, order_accuracy,family_accuracy, genus_accuracy), is.na)) %>%
+  arrange(phylum, class, order, family, genus) 
+# look at the accuracy across all levels
+taxa_guide %>% 
+  summarise(across(everything(), ~ mean(.x, na.rm = TRUE)))
+# now group by phyla and average the accuracy across all levels
+# phyla accuracy
+P<-taxa_guide %>% 
+  group_by(phylum) %>%
+  summarise(mean(phylum_accuracy, na.rm=TRUE))
+# order accuracy
+O<-taxa_guide %>%
+  select(phylum, order, order_accuracy) %>%
+  distinct()%>%
+  ungroup() %>%
+  group_by(phylum) %>%
+  summarise(mean(order_accuracy, na.rm=TRUE))
+# class accuracy
+C<-taxa_guide %>%
+  select(phylum, class, class_accuracy) %>%
+  distinct()%>%
+  ungroup() %>%
+  group_by(phylum) %>%
+  summarise(mean(class_accuracy, na.rm=TRUE))
+# family accuracy
+FAM<-taxa_guide %>%
+  select(phylum, family, family_accuracy) %>%
+  distinct()%>%
+  ungroup() %>%
+  group_by(phylum) %>%
+  summarise(mean(family_accuracy, na.rm=TRUE))
+# genus accuracy
+g<-taxa_guide %>%
+  select(phylum, genus, genus_accuracy) %>%
+  distinct()%>%
+  ungroup() %>%
+  group_by(phylum) %>%
+  summarise(mean(genus_accuracy, na.rm=TRUE))
+## merge into one table
+g %>% 
+  left_join(FAM, by="phylum") %>%
+  left_join(C, by="phylum") %>% 
+  left_join(O, by="phylum") %>%
+  left_join(P, by="phylum")
+# look at the minimum accuracy
+taxa_guide %>% 
+  group_by(phylum) %>%
+  select(-class, -order, -family, -genus, -species) %>%
+  summarise(across(everything(), ~ min(.x, na.rm = TRUE)))
+# look at average performance in each taxonomic level
+taxa_guide %>%
+  select(genus, genus_accuracy) %>%
+  distinct() %>%
+  summarise(mean(genus_accuracy, na.rm=TRUE))
+taxa_guide %>%
+  select(family, family_accuracy) %>%
+  distinct() %>%
+  summarise(mean(family_accuracy, na.rm=TRUE))
+taxa_guide %>%
+  select(class, class_accuracy) %>%
+  distinct() %>%
+  summarise(mean(class_accuracy, na.rm=TRUE))
+taxa_guide %>%
+  select(order, order_accuracy) %>%
+  distinct() %>%
+  summarise(mean(order_accuracy, na.rm=TRUE))
+taxa_guide %>%
+  select(phylum, phylum_accuracy) %>%
+  distinct() %>%
+  summarise(mean(phylum_accuracy, na.rm=TRUE))
+```
+
+
+# now convert into a matrix
+```{r}
+taxa_knn_mat <- taxa_guide %>% 
+  select(species,genus_accuracy, family_accuracy, order_accuracy, class_accuracy, phylum_accuracy) %>%
+  column_to_rownames("species") %>%
+  as.matrix()
+
+split <- taxa_guide %>%
+  filter(species %in% rownames(taxa_knn_mat)) %>%
+  arrange(factor(species, levels = rownames(taxa_knn_mat))) %>%
+  pull(phylum)
+```
+
+## Figure 2D and Supplementary Figure 3A
+```{r}
+# with na value
+cols <- rev(brewer.pal(11, "RdBu"))
+col_fun1 <- colorRamp2(seq(0, 1, length.out = 11), cols)
+circos.clear()
+circos.par(gap.after = c(rep(1,10),20))
+circos.heatmap(taxa_knn_mat,
+               split = split,
+               col=col_fun1,
+               track.height = 0.25,
+               show.sector.labels = TRUE,
+               cluster = FALSE)
+
+
+lgd = Legend(title = "Accuracy", col_fun = col_fun1)
+grid.draw(lgd)
+
+# without NA value
+taxa_guide_no_na <- taxa_guide %>% drop_na()
+taxa_guide_no_na_mat<- taxa_guide_no_na%>% 
+  select(species,genus_accuracy, family_accuracy, order_accuracy, class_accuracy, phylum_accuracy) %>%
+  column_to_rownames("species") %>%
+  as.matrix()
+split <- taxa_guide_no_na %>%
+  filter(species %in% rownames(taxa_guide_no_na_mat)) %>%
+  arrange(factor(species, levels = rownames(taxa_guide_no_na_mat))) %>%
+  pull(phylum)
+
+circos.clear()
+circos.heatmap(taxa_guide_no_na_mat,
+               split = split,
+               col=col_fun1,
+               track.height = 0.25,
+               show.sector.labels = TRUE,
+               cluster = FALSE)
+
+
+lgd = Legend(title = "Accuracy", col_fun = col_fun1)
+grid.draw(lgd)
+```
+
+
+
+

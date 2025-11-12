@@ -1,0 +1,447 @@
+---
+title: "robustness_analysis"
+author: "Julia Malnak"
+date: "2025-07-21"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Robustness analysis
+
+## Loading in the libraries and data
+```{r}
+library(tidyverse)
+library(paletteer)
+library(UpSetR)
+```
+
+```{r}
+# loading in the data
+# this is the baseline performance
+feat_100<-read_csv("../intermediate_files/results_knn/knn_result_k_11_structure.csv") %>%
+  mutate(iteration=0) # to make compatible for acccuracy function
+# this is the performance of the bootstrap
+# feat_x where x is the percentage of the features removed
+feat_5<-read_csv("../intermediate_files/robustness_knn/5_percent/all_iterations_results.csv", col_names = c("species", "known_family", "predicted_family", "score", "iteration"))
+feat_10<- read_csv("../intermediate_files/robustness_knn/10_percent/all_iterations_results.csv", col_names = c("species", "known_family", "predicted_family", "score", "iteration"))
+feat_20<-read_csv("../intermediate_files/robustness_knn/20_percent/all_iterations_results.csv", col_names = c("species", "known_family", "predicted_family", "score", "iteration"))
+feat_50<-read_csv("../intermediate_files/robustness_knn/50_percent/all_iterations_results.csv", col_names = c("species", "known_family", "predicted_family", "score", "iteration"))
+feat_75<-read_csv("../intermediate_files/robustness_knn/75_percent/all_iterations_results.csv", col_names = c("species", "known_family", "predicted_family", "score", "iteration"))
+feat_90<-read_csv("../intermediate_files/robustness_knn/90_percent/all_iterations_results.csv", col_names = c("species", "known_family", "predicted_family", "score", "iteration"))
+family_annotations<-read_tsv("../intermediate_files/family_species.tsv") %>% drop_na()
+
+```
+Now to analyze for sensitivity
+```{r}
+# this is actually the sensitivity function but named improperly
+accuracy<-function(knn_df)
+{
+  
+  knn_acc<- knn_df %>% group_by(iteration,known_family) %>% # group family for each iteration
+  summarise(correct=sum(known_family==predicted_family), # get the number correct
+         overall=n()) %>% # number of members in the family
+  mutate(accuracy=correct/overall) %>% # sensitivity is the amount correct
+  mutate(known_family = reorder(known_family, -accuracy)) %>% 
+  ungroup()  %>%  # ungrouping from the iterations
+  group_by(known_family) %>% # group by family
+  mutate(mean_accuracy=mean(accuracy)) %>% # get average performance across iterations
+  ungroup()
+  
+  return(knn_acc)
+}
+```
+
+```{r}
+# calculate the sensitivity and add the robustness as a feature to the df
+feat_100_results<- accuracy(feat_100) %>% mutate(removed=0)
+feat_5_results<-accuracy(feat_5) %>% mutate(removed=5)
+feat_10_results<- accuracy(feat_10) %>% mutate(removed=10)
+feat_20_results<- accuracy(feat_20) %>% mutate(removed=20)
+feat_50_results<- accuracy(feat_50) %>% mutate(removed=50)
+feat_75_results<- accuracy(feat_75) %>% mutate(removed=75)
+feat_90_results<- accuracy(feat_90) %>% mutate(removed=90)
+```
+Plot the mean accuracy and the number of features removed
+```{r}
+# put together all the results into one df
+all_results<- feat_100_results %>% 
+  rbind(feat_5_results) %>%
+  rbind(feat_10_results) %>%
+  rbind(feat_20_results) %>%
+  rbind(feat_50_results) %>%
+  rbind(feat_75_results) %>%
+  rbind(feat_90_results)
+ 
+```
+## Figure 2B
+```{r}
+# add the diverging palette from paletteer package this is a blue-red palette
+pal <- paletteer_d("khroma::BuRd")
+continuous_pal <- colorRampPalette(pal)(100)
+
+# plot the average sensitivity at each stage
+all_results %>%
+  select(known_family, mean_accuracy, removed) %>%
+  distinct() %>%
+  mutate(removed=factor(removed)) %>%
+  ggplot(mapping=aes(x=removed, y=known_family, fill=mean_accuracy))+
+  geom_tile(color="white", linewidth=0.1)+
+  scale_fill_gradientn(colors=continuous_pal)+ # changing the fill palette
+  theme_classic()+
+  xlab("% Removed")+
+  theme(axis.title.y = element_blank(), 
+        plot.title = element_text(color = "black"),
+        axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black"),
+        axis.text.y = element_text(color = "black"),
+        legend.text = element_text(color = "black"),
+        legend.title = element_text(color = "black"),
+        legend.key = element_rect(colour = NA))+
+  coord_fixed(ratio=0.5) # making the plot smaller
+```
+
+##Calculate statistics on the drop of sensitivity between points
+```{r}
+all_results %>% 
+  select(known_family, mean_accuracy, removed) %>%
+  distinct() %>%
+  pivot_wider(values_from = mean_accuracy, names_from = removed) %>%
+  mutate(
+    drop_5=`0`-`5`,
+    drop_10=`0`-`10`,
+    drop_20=`0`-`20`,
+    drop_50=`0`-`50`,
+    drop_75=`0`-`50`,
+    drop_90=`0`-`90`) %>%
+  select(-known_family) %>% 
+  summarise(across(everything(), ~ mean(.x, na.rm = TRUE)))
+```
+
+
+# Look at the results across different removals
+Filter for viral families that did see a drop in performance!
+Look at each time there is a drop count the protein that was involved!
+
+```{r}
+# add in the feature list
+features_5<-read_csv("../intermediate_files/robustness_knn/5_percent/feat_removal.csv", col_names = c("features", "iteration"))
+features_10<-read_csv("../intermediate_files/robustness_knn/10_percent/feat_removal.csv", col_names = c("features", "iteration"))
+features_20<- read_csv("../intermediate_files/robustness_knn/20_percent/feat_removal.csv", col_names = c("features", "iteration"))
+features_50<-read_csv("../intermediate_files/robustness_knn/50_percent/feat_removal.csv", col_names = c("features", "iteration"))
+features_75<-read_csv("../intermediate_files/robustness_knn/75_percent/feat_removal.csv", col_names = c("features", "iteration"))
+features_90<-read_csv("../intermediate_files/robustness_knn/90_percent/feat_removal.csv", col_names = c("features", "iteration"))
+all_features<-read_csv("../intermediate_files/cluster_mems.csv")
+
+```
+
+Make a function to look for boost in performance and count the cluster which was removed.
+```{r}
+# merge the default performance
+better_performance<- function(df, benchmark_performance, features, filter)
+{
+  # normalize by the number by which a feature is selected
+  features<- features %>% 
+    group_by(features) %>%
+    mutate(norm=n()) %>%
+    ungroup()
+  
+  subset<-df %>% 
+    select(iteration, known_family, accuracy) %>% # iteration of result, family, accuracy
+    left_join(benchmark_performance, by="known_family") %>% # add the benchmark performance
+    filter(accuracy > benchmark_accuracy) %>%  # only keep rows where better
+    select(-accuracy, -benchmark_accuracy) %>% # remove the accuracy
+    left_join(features, by="iteration") %>% # add in the features
+    select(iteration,features, known_family, norm) %>% # select the norm, features, and iteration
+    distinct() %>%
+    select(-iteration) %>% # remove iteration not needed
+    group_by(known_family,features) %>% # count the number of times that each feature is important
+    mutate(count=n(),
+           norm_count=count/norm) %>%
+    ungroup() %>%
+    mutate(z_score_norm_count = (norm_count - mean(norm_count, na.rm = TRUE)) /  # z score across all features
+                                sd(norm_count, na.rm = TRUE)) %>% 
+    filter(count>filter) %>% 
+    filter(z_score_norm_count > 1.645 | z_score_norm_count < -1.645) %>% # filter at the top 5 percentiles
+    arrange(desc(norm_count)) 
+    
+  return(subset)
+}
+
+```
+
+
+```{r}
+# preprocess perfect performance
+benchmark_performance<- feat_100_results %>% select(known_family,accuracy) %>%
+  rename("benchmark_accuracy"=accuracy) %>% distinct()
+feat_5_clusts<-better_performance(feat_5_results, benchmark_performance, features_5,3) 
+feat_10_clusts<-better_performance(feat_10_results, benchmark_performance, features_10, 5) 
+feat_20_clusts<-better_performance(feat_20_results, benchmark_performance, features_20, 10) 
+feat_50_clusts<-better_performance(feat_50_results, benchmark_performance, features_50, 25) 
+feat_75_clusts<-better_performance(feat_75_results, benchmark_performance, features_75, 38) 
+feat_90_clusts<-better_performance(feat_90_results, benchmark_performance, features_90, 45) 
+
+
+# look to see if there is any overlap in the features (upset plot here)
+# make into named list of features
+clusts<-list(removed_5=feat_5_clusts$features, removed_10=feat_10_clusts$features,
+             removed_20=feat_20_clusts$features, 
+             removed_50=feat_50_clusts$features,
+             removed_75=feat_75_clusts$features,
+             removed_90=feat_90_clusts$features)
+# plot the overlaps
+upset(fromList(clusts), order.by="freq", point.size = 2.5, line.size = 1.5)
+
+
+```
+
+Now going to look at what the clusters are that improve performance
+```{r}
+improve_features <- intersect(feat_5_clusts$features, feat_10_clusts$features) %>%
+  intersect(feat_20_clusts$features) 
+
+# these features must be contained by the virus that the family is misclassified for at baseline
+baseline<-read_csv("../intermediate_files/results_knn/knn_result_k_11_structure.csv") %>% filter(known_family!=predicted_family)
+count_df<- read_csv("../intermediate_files/structure_df.csv") 
+```
+
+```{r}
+# create df of features available within the family
+merged_count_df<-count_df %>% pivot_longer(cols=-cluster_ID,names_to="species", values_to = "Present" ) %>%  filter(cluster_ID %in% improve_features)
+
+merged_count_df<- merged_count_df %>% inner_join(family_annotations, by="species") %>% 
+  select(-species) %>%
+  group_by(family, cluster_ID) %>%
+  mutate(presence=ifelse(sum(Present)>0, 1, 0)) %>%
+  ungroup() %>%
+  select(family, cluster_ID, presence) 
+```
+
+```{r}
+baseline <- baseline %>% select(-species) %>% distinct() %>% left_join(merged_count_df, by=c("known_family"="family")) %>% 
+  filter(presence==1)
+# rename so they don't get .x and .y after
+merged_count_df <- merged_count_df %>% rename(class_presence=presence)
+baseline <- baseline %>% left_join(merged_count_df, by=c("predicted_family"="family", "cluster_ID")) %>% distinct()
+# only filter where shared
+baseline<- baseline %>% filter(presence==class_presence)
+# this df includes clusters found in viruses that improve performance when removed.
+
+```
+
+# Now visualizing these clusters of interest
+```{r}
+# merge the default performance
+better_performance_features<- function(df, benchmark_performance, features, filter)
+{
+  # normalize by the number by which a feature is selected
+  features<- features %>% 
+    group_by(features) %>%
+    mutate(norm=n()) %>%
+    ungroup()
+  
+  subset<-df %>% 
+    select(iteration, known_family, accuracy) %>% # iteration of result, family, accuracy
+    left_join(benchmark_performance, by="known_family") %>% # add the benchmark performance
+    filter(accuracy > benchmark_accuracy) %>%  # only keep rows where better
+    mutate(change_performance=accuracy-benchmark_accuracy) %>%
+    select(-accuracy, -benchmark_accuracy) %>% # remove the accuracy
+    left_join(features, by="iteration") %>% # add in the features
+    select(iteration,features, known_family, norm, change_performance) %>% # select the norm, features, and iteration
+    distinct() %>%
+    select(-iteration) %>% # remove iteration not needed
+    group_by(known_family,features) %>% # count the number of times that each feature is important
+    mutate(count=n(),
+           norm_count=count/norm) %>%
+    ungroup() %>%
+    mutate(z_score_norm_count = (norm_count - mean(norm_count, na.rm = TRUE)) /  # z score across all features
+                                sd(norm_count, na.rm = TRUE)) %>% 
+    filter(count>filter) %>%  # this will get rid of noise when removed once
+    distinct() %>%
+    arrange(desc(norm_count)) 
+    
+  return(subset)
+}
+```
+
+```{r}
+feat_5_clusts_feat<-better_performance_features(feat_5_results, benchmark_performance, features_5,3)
+feat_10_clusts_feat<-better_performance_features(feat_10_results, benchmark_performance, features_10, 5) 
+feat_20_clusts_feat<-better_performance_features(feat_20_results, benchmark_performance, features_20, 10) 
+feat_50_clusts_feat<-better_performance_features(feat_50_results, benchmark_performance, features_50, 25) 
+feat_75_clusts_feat<-better_performance_features(feat_75_results, benchmark_performance, features_75, 38) 
+feat_90_clusts_feat<-better_performance_features(feat_90_results, benchmark_performance, features_90, 45) 
+```
+
+
+Now looking for clusters in which removing results a decrease in performance
+```{r}
+# merge the default performance
+worse_performance<- function(df, benchmark_performance, features, filter)
+{
+  # normalize by the number by which a feature is selected
+  features<- features %>% 
+    group_by(features) %>%
+    mutate(norm=n()) %>%
+    ungroup()
+  
+  subset<-df %>% 
+    select(iteration, known_family, accuracy) %>% # iteration of result, family, accuracy
+    left_join(benchmark_performance, by="known_family") %>% # add the benchmark performance
+    filter(accuracy < benchmark_accuracy) %>%  # only keep rows where worse
+    select(-accuracy, -benchmark_accuracy) %>% # remove the accuracy
+    left_join(features, by="iteration") %>% # add in the features
+    select(iteration,features, known_family, norm) %>% # select the norm, features, and iteration
+    distinct() %>%
+    select(-iteration) %>% # remove iteration not needed
+    group_by(known_family,features) %>% # count the number of times that each feature is important
+    mutate(count=n(),
+           norm_count=count/norm) %>%
+    ungroup() %>%
+    filter(count>filter) %>%  # this will get rid of noise when removed once
+    distinct() %>%
+    arrange(desc(norm_count)) %>%
+    filter(norm_count > 0.5) # must at least hurt performance half the time it gets removed
+    
+  return(subset)
+}
+
+```
+Supplementary Figure 2D
+```{r}
+feat_5_clusts_worse<-worse_performance(feat_5_results, benchmark_performance, features_5,2)
+feat_10_clusts_worse<-worse_performance(feat_10_results, benchmark_performance, features_10,5)
+feat_20_clusts_worse<-worse_performance(feat_20_results, benchmark_performance, features_20, 10)
+feat_50_clusts_worse<-worse_performance(feat_50_results, benchmark_performance, features_50, 25)
+feat_75_clusts_worse<-worse_performance(feat_75_results, benchmark_performance, features_75, 37)
+feat_90_clusts_worse<-worse_performance(feat_90_results, benchmark_performance, features_90, 45)
+# show how much overlap there is
+clusts<-list(removed_5=feat_5_clusts_worse$features, 
+             removed_10=feat_10_clusts_worse$features,
+             removed_20=feat_20_clusts_worse$features, 
+             removed_50=feat_50_clusts_worse$features,
+             removed_75=feat_75_clusts_worse$features,
+             removed_90=feat_90_clusts_worse$features)
+# plot the overlaps
+common_features <- Reduce(intersect, clusts)
+upset(fromList(clusts), order.by="freq", point.size = 2.5, line.size = 1.5)
+```
+
+# There is a giant overlap
+So I will merge the features by the family and the features
+```{r}
+# filter for relevant columns
+worse_5<- feat_5_clusts_worse %>% select(known_family,features, norm_count) %>% rename(count_5=norm_count)
+worse_10<- feat_10_clusts_worse %>% select(known_family,features, norm_count)%>% rename(count_10=norm_count)
+worse_20<- feat_20_clusts_worse %>% select(known_family,features, norm_count)%>% rename(count_20=norm_count)
+worse_50<- feat_50_clusts_worse %>% select(known_family,features, norm_count)%>% rename(count_50=norm_count)
+worse_75<- feat_75_clusts_worse %>% select(known_family,features, norm_count)%>% rename(count_75=norm_count)
+worse_90<- feat_90_clusts_worse %>% select(known_family,features, norm_count)%>% rename(count_90=norm_count)
+# merge all features of the same family
+worse_performance<- worse_5 %>% inner_join(worse_10, by=c("known_family", "features")) %>%
+  inner_join(worse_20, by=c("known_family", "features")) %>% 
+  inner_join(worse_50, by=c("known_family", "features")) %>%
+  inner_join(worse_75, by=c("known_family", "features")) %>%
+  inner_join(worse_90, by=c("known_family", "features"))
+# I'm also going to filter for families and features where the feature is represented because we are getting many unexplainable features
+merged_count_df<-count_df %>% 
+  pivot_longer(cols=-cluster_ID,names_to="species", values_to = "Present") %>%
+  filter(Present==1) %>%
+  inner_join(family_annotations, by="species") %>% 
+  select(-species) %>%
+  group_by(family, cluster_ID) %>%
+  mutate(presence=ifelse(sum(Present)>0, 1, 0)) %>%
+  ungroup() %>%
+  select(family, cluster_ID, presence) %>%
+  drop_na() %>% 
+  distinct() %>% 
+  filter(presence==1) 
+```
+
+```{r}
+# now I'm going to right merge the df to only look at features in that family
+worse_performance<- merged_count_df %>% select(-presence) %>% inner_join(worse_performance, by=c("family"="known_family", "cluster_ID"="features"))
+```
+
+## How many clusters are worse for performance and how many of them are family-specific?
+```{r}
+unique_features<- merged_count_df %>%
+  group_by(cluster_ID) %>%
+  mutate(unique=n()) %>%
+  ungroup() %>%
+  filter(unique==1) %>% 
+  pull(cluster_ID)
+worse_performance <- worse_performance %>%
+  mutate(unique=ifelse(cluster_ID %in% unique_features, "Specific", "Non-specific"))
+```
+
+# Main Figure 2C
+```{r}
+# plot the number of features that hurt performance and how many are family specific
+worse_performance %>%
+  group_by(family) %>%
+  mutate(counting=n()) %>%
+  ungroup() %>%
+  mutate(family=reorder(family,-counting)) %>%
+  ggplot(mapping=aes(fill=unique, x=family))+
+  geom_bar(stat="count")+
+  scale_fill_paletteer_d("nationalparkcolors::CraterLake")+
+  theme_classic()+
+  theme(axis.text.x=element_text(angle = 90, vjust=0.5, hjust=1))+
+  ylab("Features")+
+  xlab("Family")+
+  labs("Family specificity")
+```
+
+## Testing the significance of the appearance of more family specific clusters
+```{r}
+# 17,447 total
+# 14,261 are unique
+# 140 are sampled after filtering
+# 110 are family specific
+phyper(110,14698,17447-14698, 140, lower.tail = FALSE)
+```
+
+## Supplementary Figure 2C: Is robustness correlated with the larger vectors?
+```{r}
+options(scipen=9999)
+# count the number of features per family
+family_count<- merged_count_df %>%
+  group_by(family) %>%
+  summarise(features=n())
+# look at the robustness by the accuracy
+all_results %>%
+  select(known_family, mean_accuracy, removed) %>%
+  left_join(family_count, by=c("known_family"="family")) %>%
+  mutate(removed=as.factor(removed)) %>%
+  ggplot(mapping=aes(x=features, y=mean_accuracy, color=removed))+
+  rasterise(geom_point(), dpi=300)+
+  rasterise(geom_line(), dpi=300)+
+  scale_x_log10()+
+  theme_classic()+
+  facet_wrap(~removed)+
+   scale_color_paletteer_d("ggthemes::Jewel_Bright")
+
+```
+
+## spearman correlation between features and accuracy
+```{r}
+spear_df<- all_results %>%
+  select(known_family, mean_accuracy, removed) %>%
+  left_join(family_count, by=c("known_family"="family"))
+# 5 % removed
+correlation_calc<- function(removal)
+{
+print(paste("results for", removal, "."))
+spear<-spear_df %>% filter(removed==removal) 
+cor.test(spear$mean_accuracy,spear$features,method="spearman")
+}
+correlation_calc(5)
+correlation_calc(10)
+correlation_calc(20)
+correlation_calc(50)
+correlation_calc(75)
+correlation_calc(90)
+```
+

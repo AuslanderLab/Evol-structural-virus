@@ -1,0 +1,307 @@
+---
+title: "Untitled"
+author: "Julia Malnak"
+date: "2025-05-28"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# KNN analysis
+```{r}
+library(tidyverse)
+library(RColorBrewer)
+library(paletteer)
+library(ggrastr)
+```
+
+
+## Supplementary Figure Picking k for KNN
+```{r}
+# picking for family
+molecule_type<- read_tsv("../intermediate_files/family_molecule_type.tsv")  %>% filter(!if_any(everything(), is.na)) %>% distinct()
+family_annotations<-read_tsv("../intermediate_files/family_species.tsv") %>% rename(Family=family) %>%
+  filter(!is.na(Family)) %>% distinct()
+family_shared<- molecule_type %>% inner_join(family_annotations, by="Family")
+# phyla annotation
+phyla<- read_tsv("../intermediate_files/phyla_species.tsv")
+# class annotation
+class<- read_tsv("../intermediate_files/class_species.tsv")
+# order annotation
+order<-read_tsv("../intermediate_files/order_species.tsv")
+# genus annotation
+genus<-read_tsv("../intermediate_files/genus_species.tsv")
+```
+### Look at the number k
+```{r}
+distribution_taxa_plot<- function(df,taxa_level, ylabel)
+{
+  taxa_sym <- ensym(taxa_level)
+  df%>%
+    distinct() %>%
+    group_by(!!taxa_sym) %>%
+    mutate(mems=n()) %>%
+    ungroup() %>%
+    filter(mems>=2)%>%
+    mutate(!!taxa_sym := reorder(!!taxa_sym, mems))%>%
+    ggplot(mapping=aes(x=!!taxa_sym))+
+    geom_histogram(stat="count", color="white")+
+   # scale_fill_gradientn(
+   #   colors=rev(brewer.pal(11,"Spectral")),
+  #    limits=c(0,50),
+  #   breaks=c(0,3,5,7,10,20,30,40,50),
+  #    name="Number of Members"
+  #  )+
+    theme_classic()+
+    scale_y_log10()+
+    ylab(ylabel)+
+    theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      legend.key.height = unit(1.5, "cm"),
+       legend.key.width = unit(0.5, "cm"),
+      legend.text=element_text(size=7)
+    )+
+    geom_hline(yintercept = c(3, 5, 11), color="darkblue")
+
+}
+
+```
+
+## Supplementary Figures 7A,D,E,F,G
+```{r}
+distribution_taxa_plot(family_annotations,Family,"family")
+distribution_taxa_plot(phyla, phylum, "Members in Phylum")
+distribution_taxa_plot(class,class, "Members in Class")
+distribution_taxa_plot(order,order, "Members in Order")
+distribution_taxa_plot(genus, genus, "Members in genus")
+```
+
+## Supplementary Figure 7B
+### Stratify the baltimore classification to see if this is Biased against a single molecular type
+```{r}
+family_shared %>%
+  group_by(Family) %>%
+  mutate(mems=n()) %>%
+  ungroup() %>%
+  filter(mems>=2)%>%
+  mutate(Family = reorder(Family, mems))%>%
+  ggplot(mapping=aes(x=Family))+
+  geom_histogram(stat="count", color="white")+
+  facet_wrap(~Molecule_type, scales = "free")+
+ # scale_fill_gradientn(
+ #   colors=c(rev(brewer.pal(11,"Spectral"))),
+ #   limits=c(0,50),
+ #   breaks=c(0,3,5,7,11,20,30,40,50, 1000),
+ #   name="Number of Members"
+ # )+
+  theme_classic()+
+  scale_y_log10()+
+  ylab("Number of Family Members")+
+  theme(
+    legend.key.height = unit(1.5, "cm"),
+     legend.key.width = unit(0.5, "cm"),
+    legend.text=element_text(size=7)
+  )+
+  geom_hline(yintercept = c(3, 5, 11), color="darkblue")
+
+  
+```
+
+# look at the median and 60% quantile
+```{r}
+family_shared %>%
+  group_by(Family) %>%
+  mutate(mems=n()) %>%
+  ungroup() %>%
+  filter(mems>=2) %>%
+  select(Family,Molecule_type,mems) %>%
+  distinct() %>%
+  group_by(Molecule_type) %>%
+  summarise(med=median(mems))
+
+family_shared %>%
+  group_by(Family) %>%
+  mutate(mems=n()) %>%
+  ungroup() %>%
+  filter(mems>=2)%>%
+  select(Family,Molecule_type,mems) %>%
+  distinct() %>%
+  group_by(Molecule_type) %>%
+  summarise(med=quantile(mems, 0.75))
+
+  
+```
+
+## Main figure: accuracy of KNN performance within the family
+```{r}
+# this is for the symmetric jaccard
+knn_3<- read_csv("../intermediate_files/results_knn/knn_result_k_3_structure.csv")
+knn_5<-read_csv("../intermediate_files/results_knn/knn_result_k_5_structure.csv")
+knn_11<-read_csv("../intermediate_files/results_knn/knn_result_k_11_structure.csv")
+
+```
+
+```{r}
+accuracy<-function(knn_df)
+{
+  knn_acc<- knn_df %>% group_by(known_family) %>%
+  summarise(correct=sum(known_family==predicted_family),
+         overall=n()) %>%
+  mutate(accuracy=correct/overall) %>%
+  mutate(known_family = reorder(known_family, -accuracy))
+  
+  return(knn_acc)
+}
+```
+
+```{r}
+knn_acc_3<- accuracy(knn_3)
+knn_acc_5<- accuracy(knn_5)
+knn_acc_11<- accuracy(knn_11)
+```
+
+```{r}
+plot_accuracy<-function(knn)
+{
+  knn %>%
+    ggplot(mapping=aes(x=known_family, y=accuracy))+
+    rasterise(
+    geom_bar(stat = "identity", color = "white", linewidth = 0.25),
+    dpi = 300
+  )+
+    theme_classic()+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size=10),
+         axis.text.y = element_text(angle = 90, hjust = 0.5))+
+    ylab("Accuracy")+
+    xlab("Family")
+}
+```
+## Figure 2A, Suuplementary Figure 2A,B
+```{r}
+plot_accuracy(knn_acc_3)
+plot_accuracy(knn_acc_5)
+plot_accuracy(knn_acc_11)
+
+```
+
+
+## Supplementary Figure 7C: Performance across different values of K
+```{r}
+knn_acc_3<-knn_acc_3 %>% mutate(k=factor(3))
+knn_acc_5<- knn_acc_5 %>% mutate(k=factor(5))
+knn_acc_11 <- knn_acc_11 %>% mutate(k=factor(11))
+```
+
+```{r}
+lg_knn<- knn_acc_3 %>% bind_rows(knn_acc_5) %>% bind_rows(knn_acc_11) %>% rename(family=known_family)
+lg_knn %>%
+  ggplot(mapping = aes(x=k, y=accuracy, group=k, color=k))+
+  geom_violin(fill=NA, linewidth=1, outliers = FALSE)+
+  geom_jitter(alpha=0.6, size=1.75, stroke=0.7)+
+  theme_classic()+
+  xlab("Hyperparameter K")+
+  ylab("Accuracy")+
+  scale_color_paletteer_d("PrettyCols::Bright")+
+  theme(legend.position="none",
+        axis.text.x = element_text( size=12))
+```
+
+### Significance testing for differences of hyperparameter
+```{r}
+library(lme4)
+# building a linear mixed effects model
+# accuracy ~ k + (1|family), family is the random effect because not independent.
+k_mod<-lmer(accuracy~k + (1|family), data=lg_knn)
+drop1(k_mod,test="Chisq")
+```
+
+
+## Supplementary: Performance across average family size
+
+```{r}
+family_size<-read_csv("../intermediate_files/nomburg_files/ncbi_viruses_genome_lengths.csv") %>%
+  select(Family,Molecule_type,Species, Length ) %>%
+  filter(!if_any(everything(), is.na)) %>%
+  group_by(Family) %>%
+  mutate(avg_length=mean(Length, na.rm=TRUE)) %>%
+  select(Family, Molecule_type,avg_length) %>%
+  rename(family=Family)  %>%
+  distinct() %>%
+  left_join(lg_knn, by="family") %>%
+  filter(!if_any(everything(), is.na)) %>%
+  mutate(avg_length=avg_length/1000)
+```
+### Supplementary Figure 2E, Size vs the k
+```{r}
+family_size %>%
+  ggplot(mapping=aes(x=avg_length, y=accuracy, color=k, shape=k))+
+  geom_point(alpha=0.3, size=2)+
+  scale_x_log10()+
+  scale_color_paletteer_d("PrettyCols::Bright")+
+  theme_classic()+
+  xlab("Length in kb")+
+  ylab("Family Accuracy")#+
+  #facet_wrap(~Molecule_type, scales="free")
+```
+
+```{r}
+## spearman correlation calculation
+# correlation
+cor(family_size$avg_length, family_size$accuracy, method="spearman")
+# p value
+cor.test(family_size$avg_length, family_size$accuracy, method="spearman")
+```
+
+### Number of features vs accuracy
+```{r}
+count_df<- read_csv("../intermediate_files/structure_df.csv") 
+```
+
+```{r}
+count_df<-count_df %>% pivot_longer(cols=-cluster_ID,names_to="species", values_to = "Present" ) 
+count_df<- count_df %>% inner_join(family_annotations, by="species") %>% 
+  select(-species) %>%
+  group_by(Family, cluster_ID) %>%
+  mutate(presence=ifelse(sum(Present)>0, 1, 0)) %>%
+  ungroup() %>%
+  select(Family, cluster_ID, presence)
+# now count the number of features
+count_df<- count_df %>%
+  distinct() %>% 
+  select(-cluster_ID) %>%
+  group_by(Family) %>%
+  summarise(features=sum(presence)) %>%
+  left_join(knn_acc_11, by=c("Family"="known_family")) %>% 
+  drop_na()
+  
+```
+## Supplementary Figure 2F
+```{r}
+options(scipen=999)
+# plotting features vs accuracy
+count_df %>%
+  #mutate(log10_feat=log10(features)) %>%
+  mutate(bin=cut(features, seq(min(features),max(features+10),10), right = FALSE)) %>%
+  ggplot(mapping=aes(x=bin, y=accuracy))+
+  stat_summary(fun=mean, geom="bar", fill="skyblue")+
+  geom_jitter(width=0.2, size=2, alpha=0.5, shape=16)+
+  theme_classic()+
+  geom_hline(aes(yintercept=0.5), color="red")+
+  xlab("Binned Number of Features")+
+  ylab("Accuracy")+
+  theme(axis.text.x=element_text(angle = 90, vjust=0.5, hjust=1))
+```
+
+```{r}
+## spearman correlation calculation
+# correlation
+cor(count_df$features, count_df$accuracy, method="spearman")
+# p value
+cor.test(count_df$features, count_df$accuracy, method="spearman")
+```
+

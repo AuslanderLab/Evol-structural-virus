@@ -1,0 +1,304 @@
+---
+title: "figure_1_comparisons"
+author: "Julia Malnak"
+date: "2025-06-09"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggExtra)
+library(patchwork)
+library(ggrastr)
+```
+# Figure 1 R-markdown
+
+## Nucleotide distance
+
+### loading in data
+```{r}
+mash_dist<-read_tsv("../intermediate_files/mash_distance_low_kmer.tsv", col_names=c("reference", "query", "distance", "p-value", "fraction"))
+family_annotations<-read_tsv("../intermediate_files/family_species.tsv") %>% 
+  drop_na() %>%
+  distinct()
+```
+
+### adding in the metadata for mash distance so that I can change the labels
+```{r}
+mash_acc<- read_tsv("../intermediate_files/genomes_nomburg_represented.txt")
+```
+
+### Merge the two accessions
+```{r}
+mash_dist<- mash_dist %>% inner_join(mash_acc, by=c("reference"="Accession")) %>% rename(Reference_species=Species)
+mash_dist <- mash_dist %>% inner_join(mash_acc, by=c("query"="Accession")) %>% rename(Query_species=Species)
+```
+
+```{r}
+# filtering identities (self vs self) and if there is 
+mash_dist <- mash_dist %>% select(Query_species, Reference_species, distance) %>% filter(Query_species!=Reference_species) %>%
+  filter(!is.na(distance))
+```
+
+###Accounting for multiple reference genomes, I need to average each group
+```{r}
+mash_dist<- mash_dist  %>%
+  rowwise() %>%
+  mutate(pair = paste(sort(c(Reference_species, Query_species)), collapse = "_")) %>% # alphabetical
+  ungroup() 
+```
+
+### Merge with the family and save for later analysis
+```{r}
+mash_fam <- mash_dist %>% 
+  right_join(family_annotations, by=c("Query_species"="species")) %>%
+  rename(query_family=family) %>%
+  right_join(family_annotations, by=c("Reference_species"="species")) %>%
+  rename(reference_family=family) %>%
+  filter(query_family==reference_family) %>%
+  filter(Query_species!=Reference_species) %>%
+  distinct() %>%
+  select(query_family, distance) %>%
+    rename(family=query_family) %>%
+    group_by(family) %>%
+    summarise(diversity=mean(distance))
+write_csv(mash_fam, "../results/family_diversity.csv")
+```
+
+### average the mash distance by pair
+```{r}
+avg_mash_dist<- mash_dist %>%
+  group_by(pair)%>%
+  mutate(avg_dist=mean(distance, na.rm=TRUE)) %>%
+  ungroup() %>%
+  select(-pair)
+rm(mash_dist)
+```
+
+
+## Amino acid and nucleotide similarity
+
+Loading in the structural similarity
+Jaccard dissimilarity will be 1-jaccard- so if they are highly dissimilar they are at 1.
+```{r}
+## from mmseqs clustering
+jaccard<-read_csv("../intermediate_files/species_jaccard.csv") %>% 
+  select(-intersection, -union) %>% 
+  mutate(jaccard_distance_structure=1-`jaccard index`)
+## this is the old amino acid file
+amino_acid<- read_csv("../intermediate_files/amino_acid_jaccard_distance.csv") %>% 
+  select(-intersection, -union) %>%
+  mutate(jaccard_distance_amino_acid=1-`jaccard index`) 
+
+# joining the two df: amino acid and structure
+jac_amin<- jaccard %>% inner_join(amino_acid, by=c("taxon1","taxon2")) %>%
+  filter(taxon1!=taxon2)
+
+```
+
+### creating amino-acid vs nucleotide dataframe
+```{r}
+amino_mash <- amino_acid %>% 
+  inner_join(avg_mash_dist, by=c("taxon1"="Query_species", "taxon2"="Reference_species"))
+```
+
+### creating the structure vs nuc
+```{r}
+jaccard_mash <- jaccard %>% 
+  inner_join(avg_mash_dist, by=c("taxon1"="Query_species", "taxon2"="Reference_species"))
+```
+-
+## Plot the distribution of the pairwise distances of the virus-virus relationships
+```{r}
+plot_dist<- function(df,dist_var,x)
+{
+  options(scipen=999)
+  # save to a pdf 
+
+df %>% 
+  ggplot(mapping=aes(x={{dist_var}}))+
+  geom_histogram(aes(y=..density..),fill="black")+
+  theme_classic()+
+    scale_x_reverse()+
+    ylab("")+
+    xlab("Pairwise Distance")+
+  ylim(0, 30)
+
+}
+```
+
+### Figure 1A, 1B. Supplementary Figure 1C
+```{r}
+# structure
+plot_dist(jac_amin, jaccard_distance_structure,25)
+# amino acid
+plot_dist(jac_amin, jaccard_distance_amino_acid,25)
+# nucleotide, takes the longest
+plot_dist(avg_mash_dist,avg_dist, 30)
+
+```
+
+## Structure vs nucleotide
+### Supplementary Figure 1D
+### How similar is nucleotide similarity to structural similarity?
+```{r}
+# creating the dotplot structure 
+p<-jaccard_mash %>% 
+  ggplot(mapping=aes(x=avg_dist, y=jaccard_distance_structure))+
+  rasterise(geom_point(alpha=0.25, size=1),dpi=300)+
+  theme_classic()+
+  xlab("Mash Distance")+
+  ylab("Structure Distance")
+p1<-ggMarginal(p, type="histogram", size=10, fill="black")
+```
+
+```{r}
+# show plot
+p1
+```
+
+## Structure vs amino acid
+### Figure 1D
+### How similar is amino acid similarity to structural similarity?
+```{r}
+#rasterization necessary for plot rendering
+p<-jac_amin %>%
+  ggplot(mapping =aes(x=jaccard_distance_amino_acid, y=jaccard_distance_structure))+
+  rasterise(geom_point(alpha=0.05, size=1), dpi=300)+
+  theme_classic()+
+  xlab("Amino Acid Distance")+
+  ylab("Structure Distance")
+```
+
+```{r}
+p1<-ggMarginal(p, type="density", size=10, fill="black")
+p1 # show the plot
+```
+
+## Amino acid vs nucleotide
+## Supplementary 1A
+### How is amino acid similarity compared to nucleotide distance?
+```{r}
+p<-amino_mash %>%
+  ggplot(mapping=aes(x=avg_dist, y=jaccard_distance_amino_acid))+
+  rasterise(geom_point(alpha=0.25, size=1), dpi=300)+
+  theme_classic()+
+  xlab("Mash Distance")+
+  ylab("Amino Acid Distance")
+p1<-ggMarginal(p, type="density", size=10, fill="black")
+  
+```
+
+```{r}
+# show plot
+p1
+```
+
+## Intrafamilial distance
+### Figure 1E
+### Since it is the same metric, which families have greatest distance between amino acid similarity and structural similarity?
+Within the family
+```{r}
+# remove redundant info from merging
+jac_amin <- jac_amin %>% select(-`jaccard index.x`, -`jaccard index.y`)
+```
+
+```{r}
+# merge the species with family labels
+family_annotations<-read_tsv("../intermediate_files/family_species.tsv") %>% 
+  drop_na() %>%
+  distinct()
+# add the family label to taxon 1
+jac_amin<- jac_amin %>% inner_join(family_annotations, by=c("taxon1"="species")) %>%
+  rename(family1=family)%>% inner_join(family_annotations, by=c("taxon2"="species")) %>%
+  rename(family2=family)
+
+```
+
+```{r}
+jac_amin<- jac_amin %>% 
+  mutate(diff_str_am=jaccard_distance_structure-jaccard_distance_amino_acid)
+```
+
+```{r}
+# pick the top35
+top_families<- jac_amin %>% 
+  filter(family1==family2) %>%
+  distinct() %>%
+  group_by(family1) %>%
+  summarise(lg_diff=mean(diff_str_am))%>%
+  arrange(lg_diff) %>%
+  head(35) %>%
+  pull(family1)
+# plot the top 35
+jac_amin %>% 
+  filter(family1==family2) %>%
+  distinct() %>%
+  filter(family1 %in% top_families) %>%
+  mutate(family1=factor(family1, levels=top_families, ordered = TRUE)) %>%
+  #pivot_longer(cols=c("jaccard_distance_structure", "jaccard_distance_amino_acid"), names_to = "feature", values_to = "distance") %>%
+  ggplot(mapping=aes(x=family1,y=diff_str_am))+
+  rasterise(geom_jitter(alpha = 0.05, color="lightgrey",width=0.3), dpi=300)+
+  geom_violin(fill=NA) +
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))+
+  ylab("Jaccard Distance (Structure-Amino Acid)")+
+  xlab("Viral Family")
+ 
+```
+
+#Supplementary Figure 1E
+## Interfamilial similarity
+Is there unexpected high similarity between families
+```{r}
+top_families<- jac_amin %>% 
+  filter(family1!=family2) %>%
+  distinct() %>%
+  group_by(family1, family2) %>%
+  summarise(lg_diff=mean(diff_str_am))%>%
+  arrange(lg_diff) %>%
+  head(60)%>%
+  rowwise() %>%
+  mutate(pair = paste(sort(c(family1, family2)), collapse = "-")) %>%
+  distinct()%>%
+  pull(pair) %>% unique()
+jac_amin %>% 
+  filter(family1!=family2) %>%
+  rowwise() %>%
+  mutate(pair = paste(sort(c(family1, family2)), collapse = "-")) %>%
+  ungroup() %>%
+  filter(pair %in% top_families) %>%
+  select(pair,diff_str_am) %>%
+  distinct() %>%
+  mutate(pair=factor(pair, levels=top_families, ordered = TRUE)) %>%
+  ggplot(mapping=aes(x=pair,y=diff_str_am))+
+  rasterise(geom_jitter( color="grey",width=0.2), dpi=300)+
+  geom_violin(fill=NA) +
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))+
+  ylab("Jaccard Distance (Structure-Amino Acid)")+
+  xlab("Viral Family Pairs")
+
+  
+```
+
+Saving a dataframe of within family distance and between family for downstream analysis
+```{r}
+jac_amin %>% 
+  filter(family1!=family2) %>%
+  select(family1,family2,jaccard_distance_structure, diff_str_am) %>%
+  write_csv("../results/between_family_dist.csv")
+jac_amin %>% 
+  filter(family1==family2) %>%
+  select(family1,jaccard_distance_structure, diff_str_am) %>%
+  write_csv("../results/within_family_dist.csv")
+```
+
+
+

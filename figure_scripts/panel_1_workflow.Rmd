@@ -1,0 +1,54 @@
+---
+title: "pipeline_figure"
+output: html_document
+date: "2025-07-02"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+clust_mem<-read_tsv("../intermediate_files/nomburg_files/merged_clusters.tax.tsv") %>%
+  filter(cluster_ID!="cluster_ID") %>%
+  select(cluster_ID, subcluster_rep) %>%
+  distinct() %>%
+  group_by(cluster_ID) %>%
+  summarise(num_mems=n())
+  
+```
+
+## Main Figure 1C
+```{r}
+clust_mem %>% ggplot(mapping=aes(x=num_mems))+
+  geom_histogram(bins=15, color="black")+
+  scale_x_log10()+
+  scale_y_log10()+
+  theme_classic()+
+  xlab("Merged Sequence Clusters")+
+  ylab("Count")
+```
+## Supplementary Figure 1B: A distribution of the number of species represented in each structural cluster (is it unique to a species?)
+```{r}
+options(scipen = 9999)
+clust_mem<-read_tsv("../intermediate_files/nomburg_files/merged_clusters.counts.tsv") 
+clust_mem %>%
+  select(cluster_ID, cluster_count) %>%
+  distinct() %>%
+  ggplot(mapping=aes(x=cluster_count)) +
+  geom_histogram(bins=20,fill="paleturquoise", color="paleturquoise4")+
+  scale_x_log10()+
+  xlab("# Species in each cluster")+
+  theme_classic()+
+  theme(
+    axis.title.y = element_blank()
+    )
+```
+
