@@ -1,0 +1,33 @@
+human_knn dir- generated from the human_knn.sh command, results for knn
+robustness_knn dir - generated from the robustness assay, where features were bootstrapped removed in KNN
+family_amino_acid_structure_distance- family and the differences in distances (viral structural encodings -amino acid) within and between family members
+nomburg_files- files extracted from original J.A. et al. (2024) paper
+viral_prots_cluster.tsv- MMseqs clustering results for the amino acids in Supplementary Table 5
+nomburg_prot_modified_species.tsv - mapping of protein accession to species name
+header_both.csv- species shared by the sequence and structure presence absense matrices
+structure_knn_df- matrix of (0/1) absense and presence of structural clusters in a df, filtered for header in the amino acid A/P matrix
+amino_acid_knn_df.csv - matrix of (0/1) absense and presence of structural clusters in a df, filtered for header in the structure A/P matrix
+amino_acid_count_df.csv - matrix of the (0/1) absense and presence of amino acid clusters in a species
+structure_df.csv - matrix of the (0/1) absense and presence of the structural cluster in a species
+species_jaccard.csv- dataframe of the viral structural encodings distance between two species
+amino_acid_jaccard_distance.csv- dataframe of the amino acid distance between two species
+class_species.tsv- mapping of taxonomic level class to species name
+family_species.tsv - mapping of the taxonomic level family to species name
+genus_species.tsv- mapping of the taxonomic level of genus to species name
+order_species.tsv- mapping of the taxonomic level of order to species name
+phyla_species.tsv - mapping of the taxonomic level of phylum to species name
+Uniprot_taxonomy_host_9606_2025_07_14.csv -  Uniprot extraction of viruses with human tropism
+human_infecting_viruses_ncbi.csv- species name of viruses infecting humans
+species_taxid.tsv- mapping of species name to taxonomy id
+aligned-psi-blast-relative-all.fa- mafft aligned sequences of the PSI plast results of Rep40
+parvo.fa- parvovirus sequence in the mafft alignment
+adeno.fa- adenovirus sequence in the mafft alignment
+mash_distance_low_kmer.tsv- output of mash between all virus pairs
+genomes_nomburg_represented.txt- mapping of species to accession of viruses in the nomburg dataset, extracted from ncbi_virus_lengths file.
+Uniprot_human_taxon_id.csv- taxonomy id of viruses with human tropism
+family_molecule_type.tsv- mapping of family name to the Baltimore classification
+taxonomic_levels- tsv of the taxonomic levels of all viruses in the Nomburg dataset
+cluster_mems.csv- cluster IDs
+check_df.csv - file of the performance of LTSM in identifying sequence in each of the sequence windows
+prevalence_change_analysis- enrichment of human or non-human infecting viruses for each function. From human_spec.py
+human_included_viruses.csv- all viruses that were classified as human tropic based on naming, Uniprot and NCBI
