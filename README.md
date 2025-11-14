@@ -115,7 +115,7 @@ Order of scripts
 + `human_enrichment_visualization`- Main Figure 4D
 + `human_knn_analysis.Rmd`- Main Figure 4E, Supplementary Figures 5B,C,D,7I,J
 
-Supplementary 4B Figures 6A,B were generated with ITOL, Figure XXX was generated in Chimera X and Pymol. Figure XXX was generated in Geneious Prime
+Supplementary Figures 4B,6A,B were generated with ITOL, Figures 4C,F and Supplementary Figures 4C,5E,G  was generated in Chimera X and Pymol. Figure 4B and Supplementary Figure 4D,5F was generated in Geneious Prime
 
 Note on intermediate files
 --------------------------
