@@ -4,7 +4,7 @@ Code and scripts for all the analyses of manuscript J.Malnak *et al.* **Uncoveri
 
 Repo structure
 -----------
-+ `/intermediate_files` files used in this analysis, must be downloaded from zenodo: 
++ `/intermediate_files` files used in this analysis, must be downloaded from zenodo: https://zenodo.org/records/17610725
 + `/src` code for the major analysis used in this study
 + `/results` directory where results are deposited if `src` is rerun.
 + `figure_scripts`- R markdown files for regenerating figures.
@@ -13,7 +13,7 @@ Repo structure
 
 Source Data
 -----------
-Data used in this study is linked in our Zenodo, too big to be published on this github repo.
+Data used in this study is linked in our Zenodo: https://zenodo.org/records/17610725, intermediate files were too large to host on github.
 All Zenodo files can be put into the `intermediate_files` dir for downstream analysis
 Files from the original database of protein fold clusters is available from the study J.Nomburg *et al.* **Birth of new protein folds and functions in the virome.** *Nature*. (2024) https://zenodo.org/records/10291581
 Following files were used in the intermediate files directory: 
@@ -119,5 +119,5 @@ Supplementary Figures 4B,6A,B were generated with ITOL, Figures 4C,F and Supplem
 
 Note on intermediate files
 --------------------------
-All intermediate files are provided in the Zenodo due to space constraints. Descriptions of the intermediate files and how they are generated are in `file_list.txt`.
+All intermediate files are provided in the Zenodo: https://zenodo.org/records/17610725. Descriptions of the intermediate files and how they are generated are in `file_list.txt`.
 
