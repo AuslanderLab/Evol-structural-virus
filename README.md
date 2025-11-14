@@ -1,12 +1,13 @@
 # Evolutionary Virology in the Lens of Structural Biology
 
-Code and scripts for all the analyses of manuscript J.Malnak *et al.* **Uncovering acquisition events and human-specific folds with pairwise comparisons of the predicted viral proteome.** (In preparation). 
+Code and scripts for all the analyses of manuscript J.Malnak *et al.* **Uncovering acquisition events and human-specific folds with pairwise comparisons of the predicted viral proteome.** (In submission). 
 
 Repo structure
 -----------
-+ `/intermediate_files` files used in this analysis
++ `/intermediate_files` files used in this analysis, must be downloaded from zenodo: 
 + `/src` code for the major analysis used in this study
 + `/results` directory where results are deposited if `src` is rerun.
++ `figure_scripts`- R markdown files for regenerating figures.
 
 
 
