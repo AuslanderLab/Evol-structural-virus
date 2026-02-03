@@ -1,0 +1,152 @@
+---
+title: "E4_analysis"
+author: "Julia Malnak"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+#Loading in Papillomavirus metadata
+```{r}
+E4_cluster_quality<- read_tsv("../intermediate_files/E4_analysis/E4_plddts.txt",
+                              col_names = c("id", "plddt", "tropism")) 
+E4_cluster_mems<- read_tsv("../intermediate_files/E4_analysis/cluster_mems.tsv",
+                           col_names = c("id", "cluster_rep", "cluster_mem"))
+```
+## Looking at distribution of structure confidence with human and non-human information
+```{r}
+E4_cluster_quality %>% 
+  ggplot(mapping = aes(x=plddt, fill=tropism))+
+  geom_histogram(color="#e9ecef", alpha=0.6, position = 'identity')+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))+
+  theme_classic()
+```
+## Look at the distribution of the size of the clusters
+```{r}
+E4_cluster_mems %>%
+  left_join(E4_cluster_quality, by=c("cluster_rep"="id")) %>%
+  select(-cluster_rep, -plddt) %>%
+  group_by(id) %>%
+  mutate(n=n()) %>%
+  ungroup() %>%
+  select(-cluster_mem) %>%
+  distinct() %>%
+  mutate(tropism=ifelse(id==699,"Human",tropism))%>%
+  mutate(tropism=ifelse(id==5156,"No human",tropism))%>%
+  ggplot(mapping=aes(x=n, fill=tropism))+
+  geom_histogram()+
+  xlab("Number of Members in Each E4 structural cluster")+
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10))+
+  theme_classic()+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))
+```
+#plddt of my clusters
+```{r}
+clust_id<-c(726,699,2522, 3232)
+E4_cluster_mems %>% 
+  filter(id %in% clust_id) %>% 
+  left_join(E4_cluster_quality, by=c("cluster_mem"="id")) %>%
+  distinct()
+
+```
+# Looking at the Sequence-based predictions of disorder in the N-terminal region
+
+```{r}
+# all sequence members with cluster ids
+cluster_to_sequence<-read_tsv("../intermediate_files/E4_analysis/cluster_ids_all_members.tsv",
+                              col_names=c("clust_id", "acc")) %>%
+  group_by(clust_id) %>%
+  mutate(mems=n()) %>%
+  ungroup()
+#IDR predictions
+IUpred_long<-read_tsv("../intermediate_files/E4_analysis/E4_IUPred2A_long.tsv",
+                      col_names=c("position", "AA", "IUPred2A_score", "ANCHOR2_score", "acc")) %>%
+  select(-AA)
+fldpnn<-read_tsv("../intermediate_files/E4_analysis/E4_fldpnn_results.csv", 
+                 col_names = c(
+                   "position","AA", "score","prediction",
+                   "rdp_rna","rdp_dna","rdp_prot",
+                   "dfl","molecular_recognition_feature", 
+                   "acc"
+                 ))
+```
+
+```{r}
+plot_scores<-function(df,score)
+{
+  # the dataframe is the scoring with acc and positon
+  # score is the y-axis variable name
+  score <- sym(score)
+df %>%
+  left_join(cluster_to_sequence, by="acc") %>%
+  filter(mems >1) %>%
+  ggplot(mapping=aes(x=position, y=!!score, group=acc))+
+  geom_point(size=0.2)+
+  geom_vline(xintercept = 20, color="red")+
+  geom_line(linewidth=0.1)+
+  facet_wrap(~clust_id)+
+  theme_classic()
+  
+}
+```
+```{r}
+plot_scores(IUpred_long,"IUPred2A_score")
+plot_scores(IUpred_long, "ANCHOR2_score")
+plot_scores(fldpnn, "score")
+```
+
+# Look at the distribution of scores for human vs non-human sequences
+```{r}
+# loading in human protein df
+human_prots<- read_tsv("../intermediate_files/papilloma_human_prots.tsv", 
+                       col_names = c("acc", "tropism"))
+
+fldpnn_nterm<- fldpnn %>% 
+  filter(position <=25) %>%
+  group_by(acc) %>%
+  summarise(mean_n_term_score=mean(score)) %>%
+  left_join(cluster_to_sequence, by="acc") 
+
+iupred_nterm<- IUpred_long %>% 
+  filter(position <= 25) %>%
+  group_by(acc) %>%
+  summarise(mean_n_term_score=mean(IUPred2A_score))
+```
+
+```{r}
+fldpnn_nterm %>%
+  filter(mems >2) %>%
+  left_join(human_prots, by="acc") %>%
+  ggplot(mapping=aes(x=tropism, y=mean_n_term_score, fill=tropism, color=tropism))+
+  geom_boxplot(linewidth=1, alpha=0.1)+
+  geom_jitter(size=2.5, fill="white")+
+  theme_classic()+
+  ylab("Mean fldpnn disorder score over first 25 amino acids")+
+  scale_color_manual(values=c("#404080", "#69b3a2" ))+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))+
+  facet_wrap(~clust_id)
+  
+```
+
+```{r}
+# pull human
+hu <- fldpnn_nterm %>% 
+  left_join(human_prots, by="acc") %>%
+  filter(tropism=="Human") %>%
+  pull(mean_n_term_score)
+# pull non-human
+non_hu <- fldpnn_nterm %>% 
+  left_join(human_prots, by="acc") %>%
+  filter(tropism!="Human") %>%
+  pull(mean_n_term_score)
+wilcox.test(hu,non_hu)
+```
+
