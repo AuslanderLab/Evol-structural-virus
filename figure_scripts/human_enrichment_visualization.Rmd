@@ -19,14 +19,20 @@ positve-negative set, where the sets are defined as human prevalent or prevalent
 ### Loading in the libraries and data
 ```{r}
 library(tidyverse)
-df <- read_csv("../intermediate_files/prevalence_change_analysis.csv") %>% 
+library(paletteer)
+
+df <- read_csv("../results/prevalence_change_analysis.csv") %>% 
   rename(family= "...1")
+# filter out circo, genomo, and smacoviridae because the effect is so small
+filter_virus<-c("Circoviridae", "Genomoviridae", "Smacoviridae")
 # filter if the row is 0
 df <- df %>% 
   rowwise() %>%
   mutate(sum_prev=sum(c_across(-family), na.rm = TRUE)) %>%
-  filter(sum_prev > 0) %>%
-  select(-sum_prev)
+  filter(sum_prev !=0) %>%
+  select(-sum_prev) %>%
+  filter(! family %in% filter_virus)
+  
 
 ```
 ### Show the data as a heatmap
@@ -37,11 +43,84 @@ mat <- df %>%
   column_to_rownames("family") %>%
   as.matrix()
 # setting the colors
-col <- colorRampPalette(c("#075AFFFF", "white","#FF0000FF"))(100)
-breaks_list <- seq(-1, 1, length.out = 101)
+col <- colorRampPalette(c("#075AFFFF", "white","#FF0000FF"))(29)
+breaks_list <- seq(-1, 1, length.out = 31)
 pheatmap(mat,
          color = col,
-         breaks=breaks_list)
+         breaks=breaks_list,
+         cellwidth = 30,
+         cellheight = 40)
+```
+
+### Examine where 32/104 is not present in human vs non-human infecting viruses
+```{r}
+# loading the 32, 104 filtered df
+feature_vec<- read_csv("../intermediate_files/32_154_clust_frequency.csv")
+# loading in the species to family mapping
+fam_species<-read_tsv("../intermediate_files/family_species.tsv")
+# merge and only keep Poxviridae, Adenoviridae, Herpesviridae
+feature_vec<- feature_vec %>%
+  inner_join(fam_species, by="species") %>%
+  filter(family=="Adenoviridae" | 
+           family=="Poxviridae" |
+           family=="Herpesviridae") %>%
+  distinct()
+```
+
+Plot which virus families are missing some of the 32 or 104 features
+```{r}
+## feature vec is master table do not touch
+vals<- feature_vec %>%
+  select(species, `32`, `154`) %>%
+  as.data.frame()
+
+# add annotations
+row_anno<- feature_vec %>% 
+  select(family,Tropism, species) %>%
+  column_to_rownames("species") %>%
+  as.data.frame()
+# add annotation colors
+row_colors=list(
+  family=c(Herpesviridae="#A1D8B6FF", 
+           Adenoviridae="#D2C48EFF",
+           Poxviridae="#F45F40FF"),
+  Tropism=c(`Non-human`="#F9AE8DFF",
+    Human="#80B9CEFF")
+  )
+
+# transform the df into a matrix
+mat_vals <- vals %>%
+  column_to_rownames("species") %>%
+  as.matrix()
+pheatmap(mat_vals,
+         color = colorRampPalette(c("white", "black"))(50),
+         border_color="black",
+         annotation_row = row_anno,
+         annotation_colors=row_colors,
+         cluster_cols = FALSE, 
+         cellwidth = 10,
+         cellheight = 10)
+
+```
+
+```{r}
+# look at the proportion of clusters in human vs non-human infecting clusters
+feature_vec %>%
+  pivot_longer(cols=c(`32`,`154`),
+               names_to = "cluster_ID",
+               values_to= "presence") %>%
+  group_by(family,Tropism,cluster_ID) %>%
+  mutate(mems=n()) %>%
+  mutate(clust_presences=sum(presence)) %>%
+  ungroup() %>%
+  mutate(prop=clust_presences/mems) %>%
+  select(family,prop,cluster_ID,Tropism, clust_presences,mems) %>%
+  distinct()
+  ggplot(mapping=aes(x=family, fill=presence, group=Tropism))+
+  geom_bar(position=position_dodge(),
+           stat=after_stat(prop))+
+  facet_wrap(~cluster_ID)+
+  theme_classic()
 ```
 
 

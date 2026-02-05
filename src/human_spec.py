@@ -105,36 +105,13 @@ def prevalence_analysis(file):
     ]
 
     # add in the uniprot human information
-    human_inf = pd.read_csv(
-        "./intermediate_files/Uniprot_taxonomy_host_9606_2025_07_14.csv"
-    )
-    taxidhu = [str(i) for i in human_inf["Taxon Id"]]
-
-    # add in the ncbi host information
-    human_inf_2 = pd.read_csv(
-        "./intermediate_files/human_infecting_viruses_ncbi.csv",
-        header=None,
-        names=["species"],
-    )
-    taxidhu2 = [str(i) for i in human_inf_2["species"]]
-
-    hu = [
-        dat["species"][i]  # keep i if
-        for i in range(len(dat["species"]))  # loop over all the species
-        if (
-            (
-                str(dat["taxonID"][i]) in taxidhu or str(dat["species"][i]) in taxidhu2
-            )  # keep if in Human db
-            or (
-                "Human" in str(dat["species"][i])
-                and "Human_associated" not in str(dat["species"][i])
-            )  # include if human in name, but not associated
-        )
-    ]
+    # make unique because was causing a math error
+    hu=list(set(get_human(dat)))
 
 
     ##Get the % presence of each cluster in every family - only human infecting ones
     tabh = tab.loc[hu].copy()
+
     tabh.index = [sp2fam[tabh.index[i]] for i in range(len(tabh.index))]
     th = (
         tabh.groupby(tabh.index).mean()
@@ -144,6 +121,8 @@ def prevalence_analysis(file):
     lss = list(set(ta.index) & set(th.index))
     taa = ta.loc[lss]
     thh = th.loc[lss]
+    print(thh[["32"]])
+
 
     ## diff of (the % presence of cluster in family for human infecting viruses) -(the % presence of cluster in family for all viruses)
     df = thh - taa
@@ -161,12 +140,11 @@ def prevalence_analysis(file):
         sp2fam[neg_h.index[i]] for i in range(len(neg_h.index))
     ]  # replacing with family labels
     nh = neg_h.groupby(neg_h.index).mean()  # computing the mean of negative values
-
     # make sure you are comparing the same families
     ss = list(set(nh.index) & set(th.index))  # extract shared index
     th_pos = th.loc[ss]
     nh_neg = nh.loc[ss]
-
+    
     diff = th_pos - nh_neg  # compute the pairwise positive- negative matrices
 
     sig_clust = prevalence_rules(diff) 
@@ -213,10 +191,82 @@ def prevalence_analysis(file):
     p = sns.clustermap(diff, cmap="bwr", vmin=-0.25, vmax=0.25)
     p.savefig("./results/human_specific_prots_lfc.png")
 
+
+def get_human(dat):
+    """
+    This will return which columns are human-infecting viruses
+    """
+    human_inf = pd.read_csv(
+        "./intermediate_files/Uniprot_taxonomy_host_9606_2025_07_14.csv"
+    )
+    taxidhu = [str(i) for i in human_inf["Taxon Id"]]
+
+    # add in the ncbi host information
+    human_inf_2 = pd.read_csv(
+        "./intermediate_files/human_infecting_viruses_ncbi.csv",
+        header=None,
+        names=["species"],
+    )
+    taxidhu2 = [str(i) for i in human_inf_2["species"]]
+
+    hu = [
+        dat["species"][i]  # keep i if
+        for i in range(len(dat["species"]))  # loop over all the species
+        if (
+            (
+                str(dat["taxonID"][i]) in taxidhu or str(dat["species"][i]) in taxidhu2
+            )  # keep if in Human db
+            or (
+                "Human" in str(dat["species"][i])
+                and "Human_associated" not in str(dat["species"][i])
+            )  # include if human in name, but not associated
+        )
+    ]
+    # manually add viruses to the annotations that have not been noticed
+    hu.append("Vaccinia_virus")
+    return hu
+
+
+def filter_significant_cols(file,clust_id, outpath):
+    """
+    Filter out the columns that don't correspond to prevalent 
+    virus families
+    :param df: the dataframe of merged.cluster.tax.tsv
+    :type df: str
+    :param clust_id: cluster ids to filter for
+    :type clust_id: list of str
+    :param outpath: path to write the resulting df
+    :type outpath: str
+    """
+    df = pd.read_csv(file, sep="\t")
+    df["v"] = [1 for i in range(len(df))]
+
+    # pivot table so row is the species and columns are clusters
+    tab = df.pivot_table(
+        columns="cluster_ID",
+        index="species",
+        values="v",
+        aggfunc="max",
+        fill_value=0,
+    )
+    tab=tab[clust_id]
+    hu=get_human(df)
+    # add the human label
+    tab['Tropism'] = "Non-human"
+    tab.loc[tab.index.isin(hu), 'Tropism'] = 'Human'
+    tab.to_csv(outpath)
+
+#def prevalence_analysis_primate(file, virus_families,human, clust_id):
+
+
 def main():
     input=sys.argv[1]
     prevalence_analysis(input)
-
+    # look at the clusters present in certain viral fams
+    input_df="./intermediate_files/nomburg_files/merged_clusters.tax.tsv"
+    filter_significant_cols(input_df,
+                          ["32","154"], 
+                            "./intermediate_files/32_154_clust_frequency.csv")
 
 if __name__=="__main__":
     main()

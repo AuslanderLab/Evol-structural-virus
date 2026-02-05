@@ -25,11 +25,13 @@ E4_cluster_mems<- read_tsv("../intermediate_files/E4_analysis/cluster_mems.tsv",
 ```{r}
 E4_cluster_quality %>% 
   ggplot(mapping = aes(x=plddt, fill=tropism))+
-  geom_histogram(color="#e9ecef", alpha=0.6, position = 'identity')+
+  geom_histogram(aes(y = after_stat(density)), color="#e9ecef", alpha=0.4, position = 'identity')+
+  #geom_density(alpha=0.5)+
   scale_fill_manual(values=c("#404080", "#69b3a2" ))+
   theme_classic()
 ```
 ## Look at the distribution of the size of the clusters
+# Supplementary Figure XXX
 ```{r}
 E4_cluster_mems %>%
   left_join(E4_cluster_quality, by=c("cluster_rep"="id")) %>%
@@ -78,7 +80,7 @@ fldpnn<-read_tsv("../intermediate_files/E4_analysis/E4_fldpnn_results.csv",
                    "acc"
                  ))
 ```
-
+# Supplementary Figure XXX
 ```{r}
 plot_scores<-function(df,score)
 {
@@ -118,12 +120,14 @@ fldpnn_nterm<- fldpnn %>%
 iupred_nterm<- IUpred_long %>% 
   filter(position <= 25) %>%
   group_by(acc) %>%
-  summarise(mean_n_term_score=mean(IUPred2A_score))
+  summarise(mean_n_term_score=mean(IUPred2A_score))%>%
+  left_join(cluster_to_sequence, by="acc") 
 ```
 
+## Main Figure 4G
 ```{r}
+#fldpnn
 fldpnn_nterm %>%
-  filter(mems >2) %>%
   left_join(human_prots, by="acc") %>%
   ggplot(mapping=aes(x=tropism, y=mean_n_term_score, fill=tropism, color=tropism))+
   geom_boxplot(linewidth=1, alpha=0.1)+
@@ -131,22 +135,45 @@ fldpnn_nterm %>%
   theme_classic()+
   ylab("Mean fldpnn disorder score over first 25 amino acids")+
   scale_color_manual(values=c("#404080", "#69b3a2" ))+
-  scale_fill_manual(values=c("#404080", "#69b3a2" ))+
-  facet_wrap(~clust_id)
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))
+#IUPRED
+iupred_nterm %>%
+  left_join(human_prots, by="acc") %>%
+  ggplot(mapping=aes(x=tropism, y=mean_n_term_score, fill=tropism, color=tropism))+
+  geom_boxplot(linewidth=1, alpha=0.1)+
+  geom_jitter(size=2.5, fill="white")+
+  theme_classic()+
+  ylab("Mean IUPred disorder score over first 25 amino acids")+
+  scale_color_manual(values=c("#404080", "#69b3a2" ))+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))
   
 ```
 
 ```{r}
-# pull human
-hu <- fldpnn_nterm %>% 
+
+# fldpnn
+hu <- fldpnn_nterm  %>% 
   left_join(human_prots, by="acc") %>%
   filter(tropism=="Human") %>%
   pull(mean_n_term_score)
 # pull non-human
-non_hu <- fldpnn_nterm %>% 
+non_hu <- fldpnn_nterm  %>% 
   left_join(human_prots, by="acc") %>%
   filter(tropism!="Human") %>%
   pull(mean_n_term_score)
 wilcox.test(hu,non_hu)
+# IUPRED
+# REPEAT for fldpnn
+hu <- iupred_nterm  %>% 
+  left_join(human_prots, by="acc") %>%
+  filter(tropism=="Human") %>%
+  pull(mean_n_term_score)
+# pull non-human
+non_hu <- iupred_nterm  %>% 
+  left_join(human_prots, by="acc") %>%
+  filter(tropism!="Human") %>%
+  pull(mean_n_term_score)
+wilcox.test(hu,non_hu)
+
 ```
 
