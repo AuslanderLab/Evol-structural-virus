@@ -115,12 +115,22 @@ feature_vec %>%
   ungroup() %>%
   mutate(prop=clust_presences/mems) %>%
   select(family,prop,cluster_ID,Tropism, clust_presences,mems) %>%
-  distinct()
-  ggplot(mapping=aes(x=family, fill=presence, group=Tropism))+
+  distinct() %>%
+  ggplot(mapping=aes(x=family,y=prop, group=Tropism, fill=Tropism))+
   geom_bar(position=position_dodge(),
-           stat=after_stat(prop))+
+           stat="identity")+
   facet_wrap(~cluster_ID)+
-  theme_classic()
+  theme_classic()+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))
 ```
 
+# now test for significant association in cluster 32
+```{r}
+contigen<- feature_vec %>% 
+  distinct() %>%
+  mutate(clust_present=ifelse(`32`==1, "Present", "Absent")) %>%
+  select(clust_present,Tropism) 
+contigen <- table(contigen$clust_present, contigen$Tropism)
+chisq.test(contigen)
+```
 
