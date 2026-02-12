@@ -21,7 +21,7 @@ positve-negative set, where the sets are defined as human prevalent or prevalent
 library(tidyverse)
 library(paletteer)
 
-df <- read_csv("../results/prevalence_change_analysis.csv") %>% 
+df <- read_csv("../intermediate_files/prevalence_change_analysis.csv") %>% 
   rename(family= "...1")
 # filter out circo, genomo, and smacoviridae because the effect is so small
 filter_virus<-c("Circoviridae", "Genomoviridae", "Smacoviridae")
@@ -32,13 +32,25 @@ df <- df %>%
   filter(sum_prev !=0) %>%
   select(-sum_prev) %>%
   filter(! family %in% filter_virus)
-  
 
+# loading in the primate specific results 
+primate_df<-read_csv("../intermediate_files/primate_prevalence_change_analysis.csv")%>% 
+  rename(family= "...1")
+primate_df <- primate_df%>% 
+  rowwise() %>%
+  mutate(sum_prev=sum(c_across(-family), na.rm = TRUE)) %>%
+  filter(sum_prev !=0) %>%
+  select(-sum_prev) %>%
+  filter(! family %in% filter_virus)
 ```
+
 ### Show the data as a heatmap
 ```{r}
 library(pheatmap)
-mat <- df %>%
+plot_heatmap<-function(data)
+{
+
+mat <- data %>%
   select(-"27", -"2170") %>% # these were not strongly enriched features
   column_to_rownames("family") %>%
   as.matrix()
@@ -50,7 +62,44 @@ pheatmap(mat,
          breaks=breaks_list,
          cellwidth = 30,
          cellheight = 40)
+}
 ```
+
+```{r}
+plot_heatmap(df)
+plot_heatmap(primate_df)
+```
+
+#Examine the differences
+```{r}
+# human specific
+human_mat <- df %>% select(colnames(primate_df)) %>%
+  mutate(family= factor(family, levels = primate_df$family)) %>%
+  arrange(family) %>%
+  column_to_rownames("family") %>%
+  as.matrix()
+primate_mat <- primate_df %>%
+  mutate(family= factor(family, levels = primate_df$family)) %>%
+  arrange(family) %>%
+  column_to_rownames("family") %>%
+  as.matrix()
+diff<- primate_mat-human_mat
+
+# plot
+col <- colorRampPalette(c("#075AFFFF", "white","#FF0000FF"))(29)
+breaks_list <- seq(-0.1, 0.1, length.out = 31)
+pheatmap(diff,
+         color = col,
+         breaks=breaks_list,
+         cellwidth = 30,
+         cellheight = 40,
+         cluster_cols = FALSE,
+         show_colnames = TRUE,
+         show_rownames=TRUE)
+  
+```
+
+
 
 ### Examine where 32/104 is not present in human vs non-human infecting viruses
 ```{r}
@@ -124,7 +173,7 @@ feature_vec %>%
   scale_fill_manual(values=c("#404080", "#69b3a2" ))
 ```
 
-# now test for significant association in cluster 32
+### now test for significant association in cluster 32
 ```{r}
 contigen<- feature_vec %>% 
   distinct() %>%
@@ -133,4 +182,280 @@ contigen<- feature_vec %>%
 contigen <- table(contigen$clust_present, contigen$Tropism)
 chisq.test(contigen)
 ```
+
+## Looking for differences in clusters 32 and 665 
+###Length
+```{r}
+length_32_clust<- read_tsv("../intermediate_files/length_clust_32_prot.tsv",
+                           col_names = c("Acc", "length"))
+length_32_clust %>%
+  ggplot(mapping=aes(x=length))+
+  geom_histogram(color="white",fill="black", bins=20)+
+  geom_vline(xintercept=248, color="red")+
+  geom_vline(xintercept = 262, color="red")+
+  theme_classic()
+```
+
+###plddt
+```{r}
+plddt_32_clust<- read_tsv("../intermediate_files/plddts_cluster_32.tsv",
+                          col_names = c("clust_rep", "plddt"))
+plddt_32_clust %>%
+  ggplot(mapping=aes(x=plddt))+
+  geom_histogram(color="white", fill="black", bins=20)+
+  geom_vline(xintercept =	86.21, color="red")+
+  geom_vline(xintercept= 83.85, color="red")+
+  theme_classic()
+```
+
+#Examining pfam related clusters
+```{r}
+# filter for the families where these clusters are present
+present_family<-c("Herpesviridae", "Poxviridae", "Adenoviridae", "Alloherpesviridae")
+fam_species<- fam_species %>% filter(family %in% present_family)
+# load in the data and filter relevant families only
+pfam_clust_32<- read_csv("../intermediate_files/clust_32_analysis/frequent_clust_32_pfam.csv") %>%
+  inner_join(fam_species, by="species") %>%
+  distinct()
+
+```
+
+# first look at the prportion of viruses that contain any igfold
+```{r}
+pfam_clust_any_ig<- pfam_clust_32 %>%
+  pivot_longer(cols=`1051`:`8944`,
+               names_to = "cluster_id",
+               values_to = "presence") %>%
+  group_by(species) %>%
+  mutate(present_once=ifelse(sum(presence)>0, 1, 0)) %>%
+  ungroup() %>%
+  select(species, family,Tropism, present_once) %>%
+  group_by(family,Tropism) %>%
+  distinct() %>%
+  summarise(mems=n(),
+         present_trop=sum(present_once),
+         prop=present_trop/mems) 
+# plot, family specific
+pfam_clust_any_ig %>%
+ggplot(mapping=aes(x=family,y=prop, group=Tropism, fill=Tropism))+
+  geom_bar(position=position_dodge(),
+           stat="identity")+
+  theme_classic()+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))
+# plot all together
+pfam_clust_any_ig %>%
+  ungroup() %>%
+  select(Tropism, mems, present_trop) %>%
+  group_by(Tropism) %>%
+  summarise(infecting=sum(mems),
+         ig_present=sum(present_trop),
+         prop=ig_present/infecting) %>%
+ggplot(mapping=aes(x=Tropism,y=prop, fill=Tropism))+
+  geom_bar(position=position_dodge(),
+           stat="identity")+
+  theme_classic()+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))
+```
+
+Look at if there is a cluster specific driver
+```{r}
+family_specific_cluster<-pfam_clust_32 %>%
+  pivot_longer(cols=`1051`:`8944`,
+               names_to = "cluster_ID",
+               values_to = "present") %>%
+  distinct() %>%
+  group_by(family,Tropism,cluster_ID) %>%
+  summarise(mems=n(),
+    present_in_clust=sum(present),
+         prop=present_in_clust/mems)
+# plot the results
+family_specific_cluster %>%
+  ggplot(mapping=aes(x=family,y=prop, group=Tropism, fill=Tropism))+
+  geom_bar(position=position_dodge(),
+           color="white",
+           stat="identity")+
+  theme_classic()+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))+
+  facet_wrap(~cluster_ID)+
+  theme(axis.text.x =element_text(angle=90))
+
+  
+```
+
+## Proportion of all human-infecting vs non human infecting viruses than contain a sequence cluster of this fold
+```{r}
+ig_containing_viruses<-read_tsv("../intermediate_files/clust_32_analysis/viruses_containing_seq_cluster_with_ig_domain.tsv",
+                                col_names=c("species","taxid")) %>%
+  mutate(contain_ig=TRUE)
+all_viruses<-read_tsv("../intermediate_files/clust_32_analysis/no_ig_domain.tsv", 
+                      skip=2,
+                      col_names = c("species", "taxid")) %>%
+  mutate(contain_ig=FALSE)
+viruses<- all_viruses %>% rbind(ig_containing_viruses) %>% distinct()%>%
+  filter(!is.na(species))
+# loading the human annotations
+hu<- read_tsv("../intermediate_files/human_included_viruses.csv" , 
+              col_names=c("species")) %>%
+  pull(species)
+
+# add Vaccinia, not included
+hu<-c(hu, "Vaccinia_virus")
+
+viruses <- viruses %>% mutate(Tropism=ifelse(species %in% hu, "Human", "Non-human"))
+# proportion of human infecting vs non-human infecting containing a ig-domain
+
+viruses_summary <- viruses %>%
+  group_by(Tropism) %>%
+  summarise(mems=n(),
+            ig_containing=sum(contain_ig),
+            prop=ig_containing/mems)
+
+# plot the results
+viruses_summary %>%
+  ggplot(mapping=aes(x=Tropism,
+                     y=prop, fill=Tropism))+
+  geom_bar(position=position_dodge(),
+           color="white",
+           stat="identity")+
+   theme_classic()+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))
+```
+
+# Look at this in structural clusters
+```{r}
+ig_containing_virus_str<-read_tsv("../intermediate_files/clust_32_analysis/viruses_with_structure_ig.tsv",
+                                  col_names=c("species","taxid")) %>%
+  mutate(contain_ig=TRUE)
+no_ig_containing_virus_str<- read_tsv("../intermediate_files/clust_32_analysis/viruses_no_ig_structural_cluster.tsv",
+                                      skip=2,
+                                      col_names=c("species","taxid")) %>%
+  mutate(contain_ig=FALSE)
+# stack into one large df
+viruses_str<- ig_containing_virus_str %>% rbind(no_ig_containing_virus_str) %>% 
+  distinct()%>%
+  filter(!is.na(species))
+# adding in infectivity information
+viruses_str <- viruses_str %>% mutate(Tropism=ifelse(species %in% hu, "Human", "Non-human"))
+virus_summary_str<-  viruses_str %>%
+  group_by(Tropism) %>%
+  summarise(mems=n(),
+            ig_containing=sum(contain_ig),
+            prop=ig_containing/mems)
+virus_summary_str %>%
+  ggplot(mapping=aes(x=Tropism,
+                     y=prop, fill=Tropism))+
+  geom_bar(position=position_dodge(),
+           color="white",
+           stat="identity")+
+   theme_classic()+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))
+```
+
+# continue this analysis with looking at the family distribution of pfam terms
+```{r}
+ig_containing_clust_info<- read_tsv("../intermediate_files/clust_32_analysis/ig_containing_cluster_lines.tsv",
+                                    col_names =c("clust_id", "str_clust_rep", "seq_clust_rep", "subclust_mem", "?", "Realm", "Phylum",
+                                                 "Class", "Order", "Family", "Genus", "species", "taxid") )
+min_ig_containing<- ig_containing_clust_info %>% select(clust_id,species) %>%
+  mutate(ig_containing=TRUE)
+filter_fam<-unique(ig_containing_clust_info$Family)
+fam_species<-read_tsv("../intermediate_files/family_species.tsv") %>%
+  filter(family %in% filter_fam) 
+min_ig_containing<- fam_species %>%
+  left_join(min_ig_containing, by="species") %>%
+  distinct()  %>% 
+  mutate(Tropism=ifelse(species %in% hu, "Human", "Non-human"))
+```
+# look at family level distribution (how many in each family contain the cluster?)
+```{r}
+fam_ig_contain <- min_ig_containing %>%
+  mutate(ig_containing=replace_na(ig_containing,FALSE)) %>%
+  group_by(species) %>%
+  mutate(present=ifelse(sum(ig_containing) >0, 1, 0)) %>%
+  ungroup() %>%
+  select(family, species, Tropism, present) %>%
+  distinct() %>%
+  group_by(family,Tropism) %>%
+  summarise(mems=n(),
+            ig_present=sum(present),
+            prop=ig_present/mems)
+fam_ig_contain %>%
+  ggplot(mapping=aes(x=family,y=prop, group=Tropism, fill=Tropism))+
+  geom_bar(position=position_dodge(),
+           color="white",
+           stat="identity")+
+  theme_classic()+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))+
+  theme(axis.text.x =element_text(angle=90))
+            
+```
+
+# look at the cluster distribution
+```{r}
+cluster_ig_containing<- min_ig_containing %>%
+  distinct() %>%
+  group_by(family,Tropism) %>%
+  mutate(species_count=n_distinct(species)) %>%
+  group_by(family,Tropism,clust_id) %>%
+  mutate(clust_present=sum(ig_containing),
+         prop=clust_present/species_count) 
+
+cluster_ig_containing %>%
+  filter(!is.na(clust_id)) %>%
+  ggplot(mapping=aes(x=family,y=prop, group=Tropism, fill=Tropism))+
+  geom_bar(position=position_dodge(),
+           color="white",
+           stat="identity")+
+  theme_classic()+
+  scale_fill_manual(values=c("#404080", "#69b3a2" ))+
+  facet_wrap(~clust_id)+
+  theme(axis.text.x =element_text(angle=90)) 
+```
+
+# look at the length of the proteins in the cluster
+```{r}
+rep_clust_id <- ig_containing_clust_info %>% select(clust_id, seq_clust_rep)
+prot_length<-read_tsv("../intermediate_files/clust_32_analysis/protein_length_ig_containing_str.tsv", 
+                      col_names = c("acc", "len"))
+prot_clust<-read_tsv("../intermediate_files/clust_32_analysis/clust_acc_id.tsv",
+                     col_names = c("id", "acc"))
+ prot_length %>% 
+  left_join(prot_clust, by="acc")  %>%
+  mutate(id=as.factor(id)) %>%
+  group_by(id) %>%
+  summarise(mean=mean(len),
+            sd=sd(len)) %>%
+  ggplot(mapping = aes(x=id, y=mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin=pmax(0,mean-sd),
+                    ymax=mean+sd),
+                width=0.2)+
+  theme_classic()+
+  ylab("Length")+
+  xlab("Cluster ID")+
+  theme(axis.text.x =element_text(angle=90)) 
+```
+
+# look at the plddt of the clusters
+```{r}
+rep_clust_id <- ig_containing_clust_info %>% select(clust_id, seq_clust_rep)
+prot_plddt<-read_tsv("../intermediate_files/clust_32_analysis/plddts_ig_containing_structures.tsv", col_names = 
+                       c("seq_clust_rep", "plddt"))  %>%
+  left_join(rep_clust_id, by="seq_clust_rep") %>% distinct()
+prot_plddt %>%
+  mutate(clust_id=as.factor(clust_id)) %>%
+  group_by(clust_id) %>%
+  summarise(mean=mean(plddt),
+            sd=sd(plddt)) %>%
+  ggplot(mapping = aes(x=clust_id, y=mean))+
+  geom_col()+
+  geom_errorbar(aes(ymin=mean-sd,
+                    ymax=mean+sd),
+                width=0.2)+
+  theme_classic()+
+  ylab("Plddt")+
+  xlab("Cluster ID")+
+  theme(axis.text.x =element_text(angle=90)) 
+```
+
 

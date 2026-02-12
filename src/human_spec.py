@@ -121,7 +121,6 @@ def prevalence_analysis(file):
     lss = list(set(ta.index) & set(th.index))
     taa = ta.loc[lss]
     thh = th.loc[lss]
-    print(thh[["32"]])
 
 
     ## diff of (the % presence of cluster in family for human infecting viruses) -(the % presence of cluster in family for all viruses)
@@ -249,6 +248,8 @@ def filter_significant_cols(file,clust_id, outpath):
         aggfunc="max",
         fill_value=0,
     )
+    tab.columns=tab.columns.astype(str)
+    
     tab=tab[clust_id]
     hu=get_human(df)
     # add the human label
@@ -256,17 +257,101 @@ def filter_significant_cols(file,clust_id, outpath):
     tab.loc[tab.index.isin(hu), 'Tropism'] = 'Human'
     tab.to_csv(outpath)
 
-#def prevalence_analysis_primate(file, virus_families,human, clust_id):
+def prevalence_analysis_primate(file):
+    dat = pd.read_csv(file, sep="\t")
+    dat["v"] = [1 for i in range(len(dat))]
+    # pivot table so row is the species and columns are clusters
+    tab = dat.pivot_table(
+        columns="cluster_ID",
+        index="species",
+        values="v",
+        aggfunc="max",
+        fill_value=0,
+    )
+    # species to family mapping
+    sp2fam = {dat["species"][i]: dat["family"][i] for i in range(len(dat))}
+    # add in human specific viruses
+    human=set(get_human(dat))
+    ## append in primate specific virus
+    primate=list(human | primate_specific(dat))
+    
+    ## define the positive
+    tabh = tab.loc[primate].copy()
+
+    tabh.index = [sp2fam[tabh.index[i]] for i in range(len(tabh.index))]
+    th = tabh.groupby(tabh.index).mean()
+    ## define the negative set
+    neg_h = tab.loc[~tab.index.isin(primate)].copy()
+    neg_h.index = [
+        sp2fam[neg_h.index[i]] for i in range(len(neg_h.index))
+    ]  # replacing with family labels
+    nh = neg_h.groupby(neg_h.index).mean()
+    ## order by the same viruses
+    ss = list(set(nh.index) & set(th.index))  # extract shared index
+    th_pos = th.loc[ss]
+    nh_neg = nh.loc[ss]
+    ## diff
+    diff = th_pos - nh_neg  # compute the pairwise positive- negative matrices
+    ## filter based on prevalence rules
+    sig_clust=prevalence_rules(diff)
+    ##visualize
+    df_save = diff[sig_clust]
+    p = sns.clustermap(diff[sig_clust], cmap="bwr", vmin=-0.25, vmax=0.25)
+    p.savefig("./results/primate_specific_prots_neg_set.png")
+    ## export results
+    df_save.to_csv("./results/primate_prevalence_change_analysis.csv")
+    
+def primate_specific(data):
+    primate_inf = pd.read_csv(
+        "./intermediate_files/primate_infecting_virus.csv",
+        header=None,
+        names=["species"],
+    )
+    # str transform
+    taxidpri = [str(i) for i in primate_inf["species"]]
+    # filter if represented in the dataframe
+    pri = [
+        data["species"][i]  # keep i if
+        for i in range(len(data["species"]))  # loop over all the species
+        if ( str(data["species"][i]) in taxidpri) ]
+    # convert into a set
+    pri=set(pri)
+    return pri
 
 
 def main():
     input=sys.argv[1]
-    prevalence_analysis(input)
-    # look at the clusters present in certain viral fams
-    input_df="./intermediate_files/nomburg_files/merged_clusters.tax.tsv"
-    filter_significant_cols(input_df,
-                          ["32","154"], 
-                            "./intermediate_files/32_154_clust_frequency.csv")
-
+    # prevalence_analysis(input)
+    # # look at the clusters present in certain viral fams
+    # input_df="./intermediate_files/nomburg_files/merged_clusters.tax.tsv"
+    ids = [
+    "1051",
+    "1083",
+    "11809",
+    "11884",
+    "13784",
+    "14775",
+    "16337",
+    "2358",
+    "2426",
+    "2611",
+    "306",
+    "32",
+    "3358",
+    "346",
+    "4011",
+    "4561",
+    "5414",
+    "5525",
+    "6186",
+    "8944"]
+    filter_significant_cols(input,
+                            ids,
+                            "./intermediate_files/clust_32_analysis/frequent_clust_32_pfam.csv")
+    # filter_significant_cols(input_df,
+    #                       ["32","154"], 
+    #                         "./intermediate_files/32_154_clust_frequency.csv")
+    # primate analysis
+    #prevalence_analysis_primate(input)
 if __name__=="__main__":
     main()
