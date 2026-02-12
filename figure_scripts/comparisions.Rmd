@@ -123,13 +123,12 @@ plot_dist<- function(df,dist_var,x)
 
 df %>% 
   ggplot(mapping=aes(x={{dist_var}}))+
-  geom_histogram(aes(y=..density..),fill="black")+
+  geom_histogram(fill="black", color="white", bins=x)+
   theme_classic()+
     scale_x_reverse()+
-    ylab("")+
+    ylab("Log-Scaled Counts")+
     xlab("Pairwise Distance")+
-  ylim(0, 30)
-
+  scale_y_log10()
 }
 ```
 
@@ -140,7 +139,44 @@ plot_dist(jac_amin, jaccard_distance_structure,25)
 # amino acid
 plot_dist(jac_amin, jaccard_distance_amino_acid,25)
 # nucleotide, takes the longest
-plot_dist(avg_mash_dist,avg_dist, 30)
+plot_dist(avg_mash_dist,avg_dist, 40)
+
+```
+## Split the comparisions by type
+```{r}
+molecule_type<-read_csv("../intermediate_files/species_molecule_type.csv") %>%
+  mutate(Species=str_replace_all(Species, " ", "_")) %>%
+  distinct()
+plot_dist_same_molecule<- function(df,dist_var,x)
+{
+  # try to filter the matches based on molecule_type
+  # merge on both species
+  options(scipen=999)
+  # save to a pdf 
+  df<- df %>%
+  left_join(molecule_type, by= c("Query_species"="Species")) %>%
+  rename("q_molecule"="Molecule_type") %>% 
+  left_join(molecule_type, by=c("Reference_species"="Species")) %>%
+  rename("r_molecule"="Molecule_type") %>%
+  filter(q_molecule==r_molecule)
+
+ df %>% 
+  ggplot(mapping=aes(x={{dist_var}}))+
+  geom_histogram(fill="black", color="white", bins=x)+
+  theme_classic()+
+    scale_x_reverse()+
+    ylab("Log-Scaled Counts")+
+    xlab("Pairwise Distance")+
+  scale_y_log10()+
+   facet_wrap(~r_molecule)
+
+}
+
+```
+
+```{r}
+plot_dist_same_molecule(avg_mash_dist,avg_dist, 40)
+
 
 ```
 
