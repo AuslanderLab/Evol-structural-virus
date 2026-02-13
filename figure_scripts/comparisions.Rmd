@@ -123,44 +123,78 @@ plot_dist<- function(df,dist_var,x)
 
 df %>% 
   ggplot(mapping=aes(x={{dist_var}}))+
-  geom_histogram(fill="black", color="white", bins=x)+
+  geom_histogram(aes(y=..density..),fill="black")+
   theme_classic()+
     scale_x_reverse()+
-    ylab("Log-Scaled Counts")+
+    ylab("Density")+
     xlab("Pairwise Distance")+
-  scale_y_log10()
+  ylim(0,30)
+  
+}
+zoom_dist<- function(df,dist_var,x)
+{
+  options(scipen=999)
+  # save to a pdf 
+
+df %>% 
+  ggplot(mapping=aes(x={{dist_var}}))+
+  geom_histogram(aes(y=..density..),fill="black")+
+  theme_classic()+
+    scale_x_reverse()+
+    ylab("Density")+
+    xlab("Pairwise Distance")+
+  coord_cartesian(xlim=c(28/30,0),
+                  ylim=c(0,1))
 }
 ```
 
 ### Figure 1A, 1B. Supplementary Figure 1C
 ```{r}
 # structure
-plot_dist(jac_amin, jaccard_distance_structure,25)
+plot_dist(jac_amin, jaccard_distance_structure,35)
+zoom_dist(jac_amin, jaccard_distance_structure,35)
 # amino acid
-plot_dist(jac_amin, jaccard_distance_amino_acid,25)
+plot_dist(jac_amin, jaccard_distance_amino_acid,35)
+zoom_dist(jac_amin, jaccard_distance_amino_acid,35)
 # nucleotide, takes the longest
 plot_dist(avg_mash_dist,avg_dist, 40)
-
+zoom_dist(avg_mash_dist,avg_dist, 40)
 ```
 ## Split the comparisions by type
 ```{r}
+# filtered out because the case count was 3 and 6 respectively
+not_allowed_types<- c("DNA","ssRNA")
 molecule_type<-read_csv("../intermediate_files/species_molecule_type.csv") %>%
   mutate(Species=str_replace_all(Species, " ", "_")) %>%
-  distinct()
-plot_dist_same_molecule<- function(df,dist_var,x)
+  distinct() %>%
+  drop_na() %>%
+  filter(!Molecule_type %in% not_allowed_types)
+plot_dist_same_molecule<- function(df,dist_var,x, nucl=TRUE)
 {
   # try to filter the matches based on molecule_type
   # merge on both species
   options(scipen=999)
-  # save to a pdf 
+  if (nucl)
+  {
+    # save to a pdf 
   df<- df %>%
-  left_join(molecule_type, by= c("Query_species"="Species")) %>%
+  inner_join(molecule_type, by= c("Query_species"="Species")) %>%
   rename("q_molecule"="Molecule_type") %>% 
-  left_join(molecule_type, by=c("Reference_species"="Species")) %>%
+  inner_join(molecule_type, by=c("Reference_species"="Species")) %>%
   rename("r_molecule"="Molecule_type") %>%
   filter(q_molecule==r_molecule)
+  }
+  else
+  {
+  df<- df %>%
+  inner_join(molecule_type, by= c("taxon1"="Species")) %>%
+  rename("q_molecule"="Molecule_type") %>% 
+  inner_join(molecule_type, by=c("taxon2"="Species")) %>%
+  rename("r_molecule"="Molecule_type") %>%
+  filter(q_molecule==r_molecule)
+  }
 
- df %>% 
+ p<-df %>% 
   ggplot(mapping=aes(x={{dist_var}}))+
   geom_histogram(fill="black", color="white", bins=x)+
   theme_classic()+
@@ -170,13 +204,29 @@ plot_dist_same_molecule<- function(df,dist_var,x)
   scale_y_log10()+
    facet_wrap(~r_molecule)
 
+
+c<- df %>%
+ group_by(r_molecule) %>%
+ mutate(mems=n()) %>%
+  ungroup() %>%
+  filter({{dist_var}}==1) %>%
+  group_by(r_molecule) %>%
+  reframe(zero_sim=n(),
+            fraction_zero_sim=zero_sim/mems) %>%
+  distinct()
+print(c)
+return(p)
 }
 
 ```
 
 ```{r}
-plot_dist_same_molecule(avg_mash_dist,avg_dist, 40)
-
+nucl_results<-plot_dist_same_molecule(avg_mash_dist,avg_dist, 20)
+nucl_results
+aa_results<-plot_dist_same_molecule(jac_amin, jaccard_distance_amino_acid,25, FALSE)
+aa_results
+str_results<- plot_dist_same_molecule(jac_amin, jaccard_distance_structure,25,FALSE)
+str_results
 
 ```
 
@@ -187,7 +237,7 @@ plot_dist_same_molecule(avg_mash_dist,avg_dist, 40)
 # creating the dotplot structure 
 p<-jaccard_mash %>% 
   ggplot(mapping=aes(x=avg_dist, y=jaccard_distance_structure))+
-  rasterise(geom_point(alpha=0.25, size=1),dpi=300)+
+  rasterise(geom_point(alpha=0.25, size=1),dpi=400)+
   theme_classic()+
   xlab("Mash Distance")+
   ylab("Structure Distance")
@@ -206,7 +256,7 @@ p1
 #rasterization necessary for plot rendering
 p<-jac_amin %>%
   ggplot(mapping =aes(x=jaccard_distance_amino_acid, y=jaccard_distance_structure))+
-  rasterise(geom_point(alpha=0.05, size=1), dpi=300)+
+  rasterise(geom_point(alpha=0.05, size=1), dpi=400)+
   theme_classic()+
   xlab("Amino Acid Distance")+
   ylab("Structure Distance")
@@ -223,7 +273,7 @@ p1 # show the plot
 ```{r}
 p<-amino_mash %>%
   ggplot(mapping=aes(x=avg_dist, y=jaccard_distance_amino_acid))+
-  rasterise(geom_point(alpha=0.25, size=1), dpi=300)+
+  rasterise(geom_point(alpha=0.25, size=1), dpi=400)+
   theme_classic()+
   xlab("Mash Distance")+
   ylab("Amino Acid Distance")
@@ -280,7 +330,7 @@ jac_amin %>%
   mutate(family1=factor(family1, levels=top_families, ordered = TRUE)) %>%
   #pivot_longer(cols=c("jaccard_distance_structure", "jaccard_distance_amino_acid"), names_to = "feature", values_to = "distance") %>%
   ggplot(mapping=aes(x=family1,y=diff_str_am))+
-  rasterise(geom_jitter(alpha = 0.05, color="lightgrey",width=0.3), dpi=300)+
+  rasterise(geom_jitter(alpha = 0.05, color="lightgrey",width=0.3), dpi=400)+
   geom_violin(fill=NA) +
   theme_classic()+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))+
@@ -314,7 +364,7 @@ jac_amin %>%
   distinct() %>%
   mutate(pair=factor(pair, levels=top_families, ordered = TRUE)) %>%
   ggplot(mapping=aes(x=pair,y=diff_str_am))+
-  rasterise(geom_jitter( color="grey",width=0.2), dpi=300)+
+  rasterise(geom_jitter( color="grey",width=0.2), dpi=400)+
   geom_violin(fill=NA) +
   theme_classic()+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))+
