@@ -123,43 +123,40 @@ plot_dist<- function(df,dist_var,x)
 
 df %>% 
   ggplot(mapping=aes(x={{dist_var}}))+
-  geom_histogram(aes(y=..density..),fill="black")+
+  stat_ecdf(geom="step")+
   theme_classic()+
-    scale_x_reverse()+
-    ylab("Density")+
-    xlab("Pairwise Distance")+
-  ylim(0,30)
+  scale_y_log10()+
+  ylab("Log-scaled Culumative Proportion")+
+  xlab("Pairwise Distance")
   
 }
-zoom_dist<- function(df,dist_var,x)
-{
-  options(scipen=999)
-  # save to a pdf 
 
-df %>% 
-  ggplot(mapping=aes(x={{dist_var}}))+
-  geom_histogram(aes(y=..density..),fill="black")+
-  theme_classic()+
-    scale_x_reverse()+
-    ylab("Density")+
-    xlab("Pairwise Distance")+
-  coord_cartesian(xlim=c(28/30,0),
-                  ylim=c(0,1))
-}
 ```
 
 ### Figure 1A, 1B. Supplementary Figure 1C
 ```{r}
 # structure
-plot_dist(jac_amin, jaccard_distance_structure,35)
-zoom_dist(jac_amin, jaccard_distance_structure,35)
+plot_dist(jac_amin, jaccard_distance_structure)
+
 # amino acid
-plot_dist(jac_amin, jaccard_distance_amino_acid,35)
-zoom_dist(jac_amin, jaccard_distance_amino_acid,35)
+plot_dist(jac_amin, jaccard_distance_amino_acid)
+
 # nucleotide, takes the longest
-plot_dist(avg_mash_dist,avg_dist, 40)
-zoom_dist(avg_mash_dist,avg_dist, 40)
+plot_dist(avg_mash_dist,avg_dist)
+
 ```
+
+```{r}
+
+test %>%
+  mutate(y=ecdf_fun(jaccard_distance_amino_acid)) %>%
+  ggplot(mapping=aes(x=jaccard_distance_amino_acid))+
+  stat_ecdf(geom="step")+
+  geom_area(aes(y=y))
+  
+```
+
+
 ## Split the comparisions by type
 ```{r}
 # filtered out because the case count was 3 and 6 respectively

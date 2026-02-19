@@ -100,7 +100,6 @@ pheatmap(diff,
 ```
 
 
-
 ### Examine where 32/104 is not present in human vs non-human infecting viruses
 ```{r}
 # loading the 32, 104 filtered df
@@ -152,26 +151,6 @@ pheatmap(mat_vals,
 
 ```
 
-```{r}
-# look at the proportion of clusters in human vs non-human infecting clusters
-feature_vec %>%
-  pivot_longer(cols=c(`32`,`154`),
-               names_to = "cluster_ID",
-               values_to= "presence") %>%
-  group_by(family,Tropism,cluster_ID) %>%
-  mutate(mems=n()) %>%
-  mutate(clust_presences=sum(presence)) %>%
-  ungroup() %>%
-  mutate(prop=clust_presences/mems) %>%
-  select(family,prop,cluster_ID,Tropism, clust_presences,mems) %>%
-  distinct() %>%
-  ggplot(mapping=aes(x=family,y=prop, group=Tropism, fill=Tropism))+
-  geom_bar(position=position_dodge(),
-           stat="identity")+
-  facet_wrap(~cluster_ID)+
-  theme_classic()+
-  scale_fill_manual(values=c("#404080", "#69b3a2" ))
-```
 
 ### now test for significant association in cluster 32
 ```{r}
@@ -183,146 +162,15 @@ contigen <- table(contigen$clust_present, contigen$Tropism)
 chisq.test(contigen)
 ```
 
-## Looking for differences in clusters 32 and 665 
-###Length
+
+# Look at this in structural clusters
 ```{r}
-length_32_clust<- read_tsv("../intermediate_files/length_clust_32_prot.tsv",
-                           col_names = c("Acc", "length"))
-length_32_clust %>%
-  ggplot(mapping=aes(x=length))+
-  geom_histogram(color="white",fill="black", bins=20)+
-  geom_vline(xintercept=248, color="red")+
-  geom_vline(xintercept = 262, color="red")+
-  theme_classic()
-```
-
-###plddt
-```{r}
-plddt_32_clust<- read_tsv("../intermediate_files/plddts_cluster_32.tsv",
-                          col_names = c("clust_rep", "plddt"))
-plddt_32_clust %>%
-  ggplot(mapping=aes(x=plddt))+
-  geom_histogram(color="white", fill="black", bins=20)+
-  geom_vline(xintercept =	86.21, color="red")+
-  geom_vline(xintercept= 83.85, color="red")+
-  theme_classic()
-```
-
-#Examining pfam related clusters
-```{r}
-# filter for the families where these clusters are present
-present_family<-c("Herpesviridae", "Poxviridae", "Adenoviridae", "Alloherpesviridae")
-fam_species<- fam_species %>% filter(family %in% present_family)
-# load in the data and filter relevant families only
-pfam_clust_32<- read_csv("../intermediate_files/clust_32_analysis/frequent_clust_32_pfam.csv") %>%
-  inner_join(fam_species, by="species") %>%
-  distinct()
-
-```
-
-# first look at the prportion of viruses that contain any igfold
-```{r}
-pfam_clust_any_ig<- pfam_clust_32 %>%
-  pivot_longer(cols=`1051`:`8944`,
-               names_to = "cluster_id",
-               values_to = "presence") %>%
-  group_by(species) %>%
-  mutate(present_once=ifelse(sum(presence)>0, 1, 0)) %>%
-  ungroup() %>%
-  select(species, family,Tropism, present_once) %>%
-  group_by(family,Tropism) %>%
-  distinct() %>%
-  summarise(mems=n(),
-         present_trop=sum(present_once),
-         prop=present_trop/mems) 
-# plot, family specific
-pfam_clust_any_ig %>%
-ggplot(mapping=aes(x=family,y=prop, group=Tropism, fill=Tropism))+
-  geom_bar(position=position_dodge(),
-           stat="identity")+
-  theme_classic()+
-  scale_fill_manual(values=c("#404080", "#69b3a2" ))
-# plot all together
-pfam_clust_any_ig %>%
-  ungroup() %>%
-  select(Tropism, mems, present_trop) %>%
-  group_by(Tropism) %>%
-  summarise(infecting=sum(mems),
-         ig_present=sum(present_trop),
-         prop=ig_present/infecting) %>%
-ggplot(mapping=aes(x=Tropism,y=prop, fill=Tropism))+
-  geom_bar(position=position_dodge(),
-           stat="identity")+
-  theme_classic()+
-  scale_fill_manual(values=c("#404080", "#69b3a2" ))
-```
-
-Look at if there is a cluster specific driver
-```{r}
-family_specific_cluster<-pfam_clust_32 %>%
-  pivot_longer(cols=`1051`:`8944`,
-               names_to = "cluster_ID",
-               values_to = "present") %>%
-  distinct() %>%
-  group_by(family,Tropism,cluster_ID) %>%
-  summarise(mems=n(),
-    present_in_clust=sum(present),
-         prop=present_in_clust/mems)
-# plot the results
-family_specific_cluster %>%
-  ggplot(mapping=aes(x=family,y=prop, group=Tropism, fill=Tropism))+
-  geom_bar(position=position_dodge(),
-           color="white",
-           stat="identity")+
-  theme_classic()+
-  scale_fill_manual(values=c("#404080", "#69b3a2" ))+
-  facet_wrap(~cluster_ID)+
-  theme(axis.text.x =element_text(angle=90))
-
-  
-```
-
-## Proportion of all human-infecting vs non human infecting viruses than contain a sequence cluster of this fold
-```{r}
-ig_containing_viruses<-read_tsv("../intermediate_files/clust_32_analysis/viruses_containing_seq_cluster_with_ig_domain.tsv",
-                                col_names=c("species","taxid")) %>%
-  mutate(contain_ig=TRUE)
-all_viruses<-read_tsv("../intermediate_files/clust_32_analysis/no_ig_domain.tsv", 
-                      skip=2,
-                      col_names = c("species", "taxid")) %>%
-  mutate(contain_ig=FALSE)
-viruses<- all_viruses %>% rbind(ig_containing_viruses) %>% distinct()%>%
-  filter(!is.na(species))
-# loading the human annotations
 hu<- read_tsv("../intermediate_files/human_included_viruses.csv" , 
               col_names=c("species")) %>%
   pull(species)
 
 # add Vaccinia, not included
 hu<-c(hu, "Vaccinia_virus")
-
-viruses <- viruses %>% mutate(Tropism=ifelse(species %in% hu, "Human", "Non-human"))
-# proportion of human infecting vs non-human infecting containing a ig-domain
-
-viruses_summary <- viruses %>%
-  group_by(Tropism) %>%
-  summarise(mems=n(),
-            ig_containing=sum(contain_ig),
-            prop=ig_containing/mems)
-
-# plot the results
-viruses_summary %>%
-  ggplot(mapping=aes(x=Tropism,
-                     y=prop, fill=Tropism))+
-  geom_bar(position=position_dodge(),
-           color="white",
-           stat="identity")+
-   theme_classic()+
-  scale_fill_manual(values=c("#404080", "#69b3a2" ))
-```
-
-# Look at this in structural clusters
-```{r}
 ig_containing_virus_str<-read_tsv("../intermediate_files/clust_32_analysis/viruses_with_structure_ig.tsv",
                                   col_names=c("species","taxid")) %>%
   mutate(contain_ig=TRUE)
