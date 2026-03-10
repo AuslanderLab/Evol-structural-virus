@@ -44,10 +44,36 @@ primate_df <- primate_df%>%
   filter(! family %in% filter_virus)
 ```
 
+### Performance the significance testing of phenotypes
+```{r}
+feature_vectors<- read_csv("../intermediate_files/significant_hits.csv") %>%
+  select(-`143...5`) %>% 
+  rename(`143`=`143...6`)
+features <- feature_vectors %>% select(-species,-Tropism) %>% colnames()
+feat<-c()
+pvals<-c()
+results <- map_dfr(features, function(i) {
+  
+  contigen <- feature_vectors %>%
+    distinct() %>%
+    mutate(clust_present = ifelse(.data[[i]] == 1, "Present", "Absent")) %>%
+    select(clust_present, Tropism) %>%
+    table()
+
+  tibble(
+    feature = i,
+    p_value = fisher.test(contigen)$p.value
+  )
+})
+results <- results %>%
+  mutate(adj_p=p.adjust(p_value, method="fdr"))
+
+```
+
 ### Show the data as a heatmap
 ```{r}
 library(pheatmap)
-plot_heatmap<-function(data)
+plot_heatmap<-function(data, df=NULL)
 {
 
 mat <- data %>%
@@ -57,16 +83,27 @@ mat <- data %>%
 # setting the colors
 col <- colorRampPalette(c("#075AFFFF", "white","#FF0000FF"))(29)
 breaks_list <- seq(-1, 1, length.out = 31)
+if (!is.null(df))
+{
+  df <- df %>%
+    select(-p_value) %>%
+    mutate(pass_thershold=ifelse(adj_p < 0.05, "yes", "no")) %>%
+    select(-adj_p) %>%
+    slice(match(colnames(mat),feature)) %>%
+    column_to_rownames("feature") 
+  print(df)
+}
 pheatmap(mat,
          color = col,
          breaks=breaks_list,
          cellwidth = 30,
-         cellheight = 40)
+         cellheight = 40,
+         annotation_col=df)
 }
 ```
 
 ```{r}
-plot_heatmap(df)
+plot_heatmap(df, results)
 plot_heatmap(primate_df)
 ```
 
@@ -152,22 +189,17 @@ pheatmap(mat_vals,
 ```
 
 
-### now test for significant association in cluster 32
-```{r}
-contigen<- feature_vec %>% 
-  distinct() %>%
-  mutate(clust_present=ifelse(`32`==1, "Present", "Absent")) %>%
-  select(clust_present,Tropism) 
-contigen <- table(contigen$clust_present, contigen$Tropism)
-chisq.test(contigen)
-```
-
 
 # Look at this in structural clusters
 ```{r}
 hu<- read_tsv("../intermediate_files/human_included_viruses.csv" , 
               col_names=c("species")) %>%
   pull(species)
+# add in also annotations from feature vec
+hu2<- feature_vec %>% 
+  filter(Tropism=="Human") %>%
+  pull(species)
+hu<-c(hu,hu2)
 
 # add Vaccinia, not included
 hu<-c(hu, "Vaccinia_virus")
@@ -304,6 +336,38 @@ prot_plddt %>%
   ylab("Plddt")+
   xlab("Cluster ID")+
   theme(axis.text.x =element_text(angle=90)) 
+```
+
+## Test if the Ig-folds are more enriched in human vs non-human folds
+```{r}
+viruses_str_tbl <-viruses_str %>%
+  distinct() %>%
+  select(contain_ig, Tropism) %>%
+  table()
+fisher.test(viruses_str_tbl)
+```
+
+## Test for Ig-fold significance across all families except Alloherpesviridae
+```{r}
+families<-c("Adenoviridae", "Herpesviridae", "Flaviviridae", "Poxviridae")
+for (fam in families)
+{
+  tbl<-min_ig_containing %>%
+  mutate(ig_containing=replace_na(ig_containing,FALSE)) %>% 
+  select(family,species,ig_containing, Tropism) %>%
+  group_by(species) %>%
+  mutate(present=ifelse(sum(ig_containing) >0, 1, 0)) %>%
+  ungroup() %>%
+  filter(family ==fam) %>%
+  select(species,Tropism,present) %>%
+  distinct() %>%
+  select(-species) %>% 
+    table()
+  print(tbl)
+  print(fam)
+  print(fisher.test(tbl))
+}
+
 ```
 
 

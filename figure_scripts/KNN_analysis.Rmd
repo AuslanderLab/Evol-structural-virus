@@ -239,8 +239,9 @@ family_size<-read_csv("../intermediate_files/nomburg_files/ncbi_viruses_genome_l
 ### Supplementary Figure 2E, Size vs the k
 ```{r}
 family_size %>%
-  ggplot(mapping=aes(x=avg_length, y=accuracy, color=k, shape=k))+
-  geom_point(alpha=0.3, size=2)+
+  filter(k==11) %>%
+  ggplot(mapping=aes(x=avg_length, y=accuracy))+
+  geom_point(size=2)+
   scale_x_log10()+
   scale_color_paletteer_d("PrettyCols::Bright")+
   theme_classic()+
@@ -303,5 +304,108 @@ count_df %>%
 cor(count_df$features, count_df$accuracy, method="spearman")
 # p value
 cor.test(count_df$features, count_df$accuracy, method="spearman")
+```
+
+
+## Add in additinoal analysis of the knn results from the subsampled structures
+```{r}
+baseline<-read_csv("../intermediate_files/results_knn/knn_result_k_11_structure.csv") %>%
+  rename("known_taxa"="known_family") %>%
+  rename("predicted_taxa"="predicted_family")
+plddt_50<-read_csv("../intermediate_files/high_quality_structure_results/knn_plddt_50.csv")
+plddt_70<-read_csv("../intermediate_files/high_quality_structure_results/knn_plddt_70.csv")
+```
+
+# different accuracy function
+```{r}
+mod_accuracy<-function(knn_df)
+{
+  knn_acc<- knn_df %>% group_by(known_taxa) %>%
+  mutate(correct=sum(known_taxa==predicted_taxa),
+         overall=n()) %>%
+  mutate(accuracy=correct/overall) %>%
+  mutate(known_taxa = reorder(known_taxa, -accuracy)) %>%
+    ungroup() %>%
+    select(species,accuracy)
+  
+  return(knn_acc)
+}
+```
+
+# get the accuracy for each and then combine into the large plot
+```{r}
+# filtering out 
+baseline<-mod_accuracy(baseline) %>% mutate(plddt="baseline")
+plddt_50<-mod_accuracy(plddt_50) %>% mutate(plddt="50") 
+plddt_70<-mod_accuracy(plddt_70) %>% mutate(plddt="70") 
+
+# put all together
+knn_all_plddt<- baseline %>% 
+  rbind(plddt_50) %>%
+  rbind(plddt_70) 
+```
+
+```{r}
+# join with family and look at family level accuracy
+plddt_accuracy<-knn_all_plddt %>%
+  left_join(family_annotations, by="species") %>%
+  select(-species) %>%
+  distinct()
+# filter for families only in baseline
+baseline_fam <- plddt_accuracy %>% filter(plddt=="baseline") %>% pull(Family)
+plddt_accuracy <- plddt_accuracy %>% filter(Family %in% baseline_fam)
+```
+
+# plot the plddt accuracy 
+```{r}
+pal <- paletteer_d("khroma::BuRd")
+continuous_pal <- colorRampPalette(pal)(100)
+# plotting results
+plddt_accuracy %>%
+  mutate(plddt=factor(plddt, levels=c("baseline", "50", "70", "90"))) %>%
+  ggplot(mapping=aes(x=plddt, y=Family, fill=accuracy))+
+  geom_tile(color="white", linewidth=0.1)+
+  scale_fill_gradientn(colors=continuous_pal)+ # changing the fill palette
+  theme_classic()+
+  xlab("pLDDT of structures")+
+  theme(axis.title.y = element_blank(), 
+        plot.title = element_text(color = "black"),
+        axis.title.x = element_text(color = "black"),
+        axis.text.x = element_text(color = "black", angle=90),
+        axis.text.y = element_text(color = "black"),
+        legend.text = element_text(color = "black"),
+        legend.title = element_text(color = "black"),
+        legend.key = element_rect(colour = NA))+
+  coord_fixed(ratio=0.5) # making the plot smaller
+```
+
+Calculate the average for each strata
+```{r}
+plddt_accuracy %>% filter(plddt=="baseline") %>% pull(accuracy) %>% mean()
+plddt_accuracy %>% filter(plddt=="baseline") %>% pull(accuracy) %>% var()
+plddt_accuracy %>% filter(plddt=="50") %>% pull(accuracy) %>% mean()
+plddt_accuracy %>% filter(plddt=="50") %>% pull(accuracy) %>% var()
+plddt_accuracy %>% filter(plddt=="70") %>% pull(accuracy) %>% mean()
+plddt_accuracy %>% filter(plddt=="70") %>% pull(accuracy) %>% var()
+```
+
+```{r}
+virus_b<- plddt_accuracy %>% filter(plddt=="baseline") %>% pull(Family)
+virus_50<- plddt_accuracy %>% filter(plddt=="50") %>% pull(Family)
+virus_70<-plddt_accuracy %>% filter(plddt=="70") %>% pull(Family)
+virus_90<-plddt_accuracy %>% filter(plddt=="90") %>% pull(Family)
+virus_overlap <- virus_b %>% intersect(virus_50) %>% intersect(virus_70) %>% intersect(virus_90)
+plddt_accuracy<- plddt_accuracy %>% filter(Family %in% virus_overlap)
+```
+
+```{r}
+plddt_accuracy %>% filter(plddt=="baseline") %>% pull(accuracy) %>% mean()
+plddt_accuracy %>% filter(plddt=="baseline") %>% pull(accuracy) %>% var()
+plddt_accuracy %>% filter(plddt=="50") %>% pull(accuracy) %>% mean()
+plddt_accuracy %>% filter(plddt=="50") %>% pull(accuracy) %>% var()
+plddt_accuracy %>% filter(plddt=="70") %>% pull(accuracy) %>% mean()
+plddt_accuracy %>% filter(plddt=="50") %>% pull(accuracy) %>% var()
+plddt_accuracy %>% filter(plddt=="90") %>% pull(accuracy) %>% mean()
+plddt_accuracy %>% filter(plddt=="50") %>% pull(accuracy) %>% var()
 ```
 

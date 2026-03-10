@@ -33,3 +33,4 @@ prevalence_change_analysis- enrichment of human or non-human infecting viruses f
 human_included_viruses.csv- all viruses that were classified as human tropic based on naming, Uniprot and NCBI
 E4_plddts.txt- tsv of the E4 papillomavirus proteins, plddts, and human-tropism
 cluster_size.txt- tsv of the E4 papillomavirus proteins and cluster size
+primate_specific_virus.csv- species names of viruses infecting primates from NCBI virus

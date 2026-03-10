@@ -113,49 +113,39 @@ amino_mash <- amino_acid %>%
 jaccard_mash <- jaccard %>% 
   inner_join(avg_mash_dist, by=c("taxon1"="Query_species", "taxon2"="Reference_species"))
 ```
--
-## Plot the distribution of the pairwise distances of the virus-virus relationships
-```{r}
-plot_dist<- function(df,dist_var,x)
-{
-  options(scipen=999)
-  # save to a pdf 
 
-df %>% 
-  ggplot(mapping=aes(x={{dist_var}}))+
+## Figure 1A
+
+```{r}
+# add into same df and then remove because space
+aa<- jac_amin %>%
+  select(jaccard_distance_amino_acid) %>% 
+  mutate(unit="amino acid") %>% 
+  rename("pairwise_distance"="jaccard_distance_amino_acid")
+structure<- jac_amin %>%
+  select(jaccard_distance_structure) %>%
+  mutate(unit="structure") %>% 
+  rename("pairwise_distance"="jaccard_distance_structure")
+nucleic_acid<- avg_mash_dist %>%
+  select(avg_dist) %>%
+  mutate(unit="nucleotide")  %>%
+  rename("pairwise_distance"="avg_dist")
+all_units<- aa %>% rbind(structure) %>% rbind(nucleic_acid)
+rm(aa)
+rm(structure)
+rm(nucleic_acid)
+```
+
+```{r}
+options(scipen = 999)
+all_units %>% 
+  ggplot(mapping=aes(x=pairwise_distance, group=unit, color=unit, alpha=0.5))+
   stat_ecdf(geom="step")+
   theme_classic()+
-  scale_y_log10()+
+  #scale_y_log10()+
   ylab("Log-scaled Culumative Proportion")+
   xlab("Pairwise Distance")
-  
-}
-
 ```
-
-### Figure 1A, 1B. Supplementary Figure 1C
-```{r}
-# structure
-plot_dist(jac_amin, jaccard_distance_structure)
-
-# amino acid
-plot_dist(jac_amin, jaccard_distance_amino_acid)
-
-# nucleotide, takes the longest
-plot_dist(avg_mash_dist,avg_dist)
-
-```
-
-```{r}
-
-test %>%
-  mutate(y=ecdf_fun(jaccard_distance_amino_acid)) %>%
-  ggplot(mapping=aes(x=jaccard_distance_amino_acid))+
-  stat_ecdf(geom="step")+
-  geom_area(aes(y=y))
-  
-```
-
 
 ## Split the comparisions by type
 ```{r}
@@ -253,7 +243,7 @@ p1
 #rasterization necessary for plot rendering
 p<-jac_amin %>%
   ggplot(mapping =aes(x=jaccard_distance_amino_acid, y=jaccard_distance_structure))+
-  rasterise(geom_point(alpha=0.05, size=1), dpi=400)+
+  rasterise(geom_point(alpha=0.05, size=1, shape=16), dpi=400)+
   theme_classic()+
   xlab("Amino Acid Distance")+
   ylab("Structure Distance")
@@ -261,7 +251,15 @@ p<-jac_amin %>%
 
 ```{r}
 p1<-ggMarginal(p, type="density", size=10, fill="black")
-p1 # show the plot
+# save plot
+
+ggsave("amino_vs_str.pdf",
+       device=cairo_pdf,
+       plot=p1,
+       width=10,
+       height=10,
+       units="in",
+       dpi=400)
 ```
 
 ## Amino acid vs nucleotide
@@ -384,4 +382,40 @@ jac_amin %>%
 ```
 
 
+## Adding in additional analysis on the impact of plddt on the structure
+(too intensive to load in more than 1, so we will look at the percentage of viruses that are comparable)
+We also need to standardize comparisions, I only looked at pairs that were in both groups.
+```{r}
+# 18589032 is the number of original comparisions 
+baseline<- jac_amin %>% 
+  filter(taxon1!=taxon2) %>% 
+  summarise(non_zero=sum(jaccard_distance_structure!=1)/18589032) %>%
+  mutate(plddt="baseline")
+plddt_50<- read_csv("../intermediate_files/high_quality_structure_results/plddt_50_jaccard.csv") %>%
+  mutate(jaccard_distance_structure=1-`jaccard index`) %>%
+  inner_join(amino_acid, by=c("taxon1","taxon2")) %>%
+  filter(taxon1!=taxon2) %>%
+  summarise(non_zero=sum(jaccard_distance_structure!=1)/18589032) %>%
+  mutate(plddt="50")
+plddt_70<- read_csv("../intermediate_files/high_quality_structure_results/plddt_70_jaccard.csv") %>%
+  mutate(jaccard_distance_structure=1-`jaccard index`) %>%
+  inner_join(amino_acid, by=c("taxon1","taxon2")) %>%
+  filter(taxon1!=taxon2) %>%
+  summarise(non_zero=sum(jaccard_distance_structure!=1)/18589032)  %>%
+  mutate(plddt="70")
+
+```
+
+```{r}
+# merge together all the dataframes and plot
+all_comparisions <- baseline %>% rbind(plddt_50) %>% rbind(plddt_70) %>% 
+  mutate(plddt=factor(plddt, levels=c("baseline", "50", "70")))
+
+all_comparisions %>% 
+  ggplot(mapping=aes(x=plddt, y=non_zero))+
+  geom_col(fill="black")+
+  theme_classic()+
+  ylab("% of comparisions")+
+  geom_hline(yintercept=0.021, color="red")
+```
 

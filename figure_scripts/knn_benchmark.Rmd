@@ -111,7 +111,7 @@ ggplot(knn, aes(x = k, y = accuracy, color = feature)) +
 
 
 
-## Figure correlating accuracy to the discrepancy between the structural and amino acid distances
+## Figure 3c: correlating accuracy to the discrepancy between the structural and amino acid distances
 ```{r}
 #loading in the dataframe of interest
 within_family<-read_csv("../intermediate_files/family_amino_acid_structure_distance/within_family_dist.csv") %>%
@@ -306,23 +306,28 @@ taxa_guide %>%
 taxa_guide %>%
   select(genus, genus_accuracy) %>%
   distinct() %>%
-  summarise(mean(genus_accuracy, na.rm=TRUE))
+  summarise(mean=mean(genus_accuracy, na.rm=TRUE),
+            variance=var(genus_accuracy, na.rm=TRUE))
 taxa_guide %>%
   select(family, family_accuracy) %>%
   distinct() %>%
-  summarise(mean(family_accuracy, na.rm=TRUE))
+  summarise(mean=mean(family_accuracy, na.rm=TRUE),
+            variance=var(family_accuracy, na.rm=TRUE))
 taxa_guide %>%
   select(class, class_accuracy) %>%
   distinct() %>%
-  summarise(mean(class_accuracy, na.rm=TRUE))
+  summarise(mean=mean(class_accuracy, na.rm=TRUE),
+            variance=var(class_accuracy, na.rm=TRUE))
 taxa_guide %>%
   select(order, order_accuracy) %>%
   distinct() %>%
-  summarise(mean(order_accuracy, na.rm=TRUE))
+  summarise(mean=mean(order_accuracy, na.rm=TRUE),
+            variance=var(order_accuracy, na.rm=TRUE))
 taxa_guide %>%
   select(phylum, phylum_accuracy) %>%
   distinct() %>%
-  summarise(mean(phylum_accuracy, na.rm=TRUE))
+  summarise(mean(phylum_accuracy, na.rm=TRUE),
+            variance=var(phylum_accuracy, na.rm=TRUE))
 ```
 
 

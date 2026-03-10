@@ -321,37 +321,27 @@ def primate_specific(data):
 
 def main():
     input=sys.argv[1]
-    # prevalence_analysis(input)
+    prevalence_analysis(input)
     # # look at the clusters present in certain viral fams
-    # input_df="./intermediate_files/nomburg_files/merged_clusters.tax.tsv"
-    ids = [
-    "1051",
-    "1083",
-    "11809",
-    "11884",
-    "13784",
-    "14775",
-    "16337",
-    "2358",
-    "2426",
-    "2611",
-    "306",
-    "32",
-    "3358",
-    "346",
-    "4011",
-    "4561",
-    "5414",
-    "5525",
-    "6186",
-    "8944"]
+    input_df="./intermediate_files/nomburg_files/merged_clusters.tax.tsv"
+    ids = ["506",
+           "253",
+           "2234",
+           "143",
+           "833", 
+           "32",
+           "31",
+           "48",
+           "154",
+           "193",
+           "16",
+           "104"
+    ]
     filter_significant_cols(input,
                             ids,
-                            "./intermediate_files/clust_32_analysis/frequent_clust_32_pfam.csv")
-    # filter_significant_cols(input_df,
-    #                       ["32","154"], 
-    #                         "./intermediate_files/32_154_clust_frequency.csv")
+                            "./intermediate_files/significant_hits.csv")
+   
     # primate analysis
-    #prevalence_analysis_primate(input)
+    prevalence_analysis_primate(input)
 if __name__=="__main__":
     main()

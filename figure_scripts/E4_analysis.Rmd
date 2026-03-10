@@ -31,7 +31,7 @@ E4_cluster_quality %>%
   theme_classic()
 ```
 ## Look at the distribution of the size of the clusters
-# Supplementary Figure XXX
+# Supplementary Figure 7A
 ```{r}
 E4_cluster_mems %>%
   left_join(E4_cluster_quality, by=c("cluster_rep"="id")) %>%
