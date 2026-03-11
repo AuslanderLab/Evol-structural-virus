@@ -102,19 +102,8 @@ jac_amin<- jaccard %>% inner_join(amino_acid, by=c("taxon1","taxon2")) %>%
 
 ```
 
-### creating amino-acid vs nucleotide dataframe
-```{r}
-amino_mash <- amino_acid %>% 
-  inner_join(avg_mash_dist, by=c("taxon1"="Query_species", "taxon2"="Reference_species"))
-```
-
-### creating the structure vs nuc
-```{r}
-jaccard_mash <- jaccard %>% 
-  inner_join(avg_mash_dist, by=c("taxon1"="Query_species", "taxon2"="Reference_species"))
-```
-
-## Figure 1A
+## Examining metrics of pairwise similarity across all viruses
+### Figure 1A
 
 ```{r}
 # add into same df and then remove because space
@@ -137,17 +126,29 @@ rm(nucleic_acid)
 ```
 
 ```{r}
+# plotting ecdf results
 options(scipen = 999)
 all_units %>% 
   ggplot(mapping=aes(x=pairwise_distance, group=unit, color=unit, alpha=0.5))+
   stat_ecdf(geom="step")+
   theme_classic()+
-  #scale_y_log10()+
   ylab("Log-scaled Culumative Proportion")+
   xlab("Pairwise Distance")
 ```
 
-## Split the comparisions by type
+### Supplementary Figure 1A
+```{r}
+options(scipen = 999)
+all_units %>% 
+  ggplot(mapping=aes(x=pairwise_distance, group=unit, color=unit, alpha=0.5))+
+  stat_ecdf(geom="step")+
+  theme_classic()+
+  scale_y_log10()+
+  ylab("Log-scaled Culumative Proportion")+
+  xlab("Pairwise Distance")
+```
+
+### Supplementary Figure D,E,F: Splitting all by all comparisions by molecule type
 ```{r}
 # filtered out because the case count was 3 and 6 respectively
 not_allowed_types<- c("DNA","ssRNA")
@@ -217,24 +218,6 @@ str_results
 
 ```
 
-## Structure vs nucleotide
-### Supplementary Figure 1D
-### How similar is nucleotide similarity to structural similarity?
-```{r}
-# creating the dotplot structure 
-p<-jaccard_mash %>% 
-  ggplot(mapping=aes(x=avg_dist, y=jaccard_distance_structure))+
-  rasterise(geom_point(alpha=0.25, size=1),dpi=400)+
-  theme_classic()+
-  xlab("Mash Distance")+
-  ylab("Structure Distance")
-p1<-ggMarginal(p, type="histogram", size=10, fill="black")
-```
-
-```{r}
-# show plot
-p1
-```
 
 ## Structure vs amino acid
 ### Figure 1D
@@ -260,25 +243,6 @@ ggsave("amino_vs_str.pdf",
        height=10,
        units="in",
        dpi=400)
-```
-
-## Amino acid vs nucleotide
-## Supplementary 1A
-### How is amino acid similarity compared to nucleotide distance?
-```{r}
-p<-amino_mash %>%
-  ggplot(mapping=aes(x=avg_dist, y=jaccard_distance_amino_acid))+
-  rasterise(geom_point(alpha=0.25, size=1), dpi=400)+
-  theme_classic()+
-  xlab("Mash Distance")+
-  ylab("Amino Acid Distance")
-p1<-ggMarginal(p, type="density", size=10, fill="black")
-  
-```
-
-```{r}
-# show plot
-p1
 ```
 
 ## Intrafamilial distance
@@ -334,7 +298,7 @@ jac_amin %>%
  
 ```
 
-#Supplementary Figure 1E
+#Supplementary Figure 1G
 ## Interfamilial similarity
 Is there unexpected high similarity between families
 ```{r}
@@ -383,10 +347,12 @@ jac_amin %>%
 
 
 ## Adding in additional analysis on the impact of plddt on the structure
-(too intensive to load in more than 1, so we will look at the percentage of viruses that are comparable)
-We also need to standardize comparisions, I only looked at pairs that were in both groups.
+### Supplementary Figure 1C
+
+
 ```{r}
 # 18589032 is the number of original comparisions 
+# We also need to standardize comparisions, I only looked at pairs that were in both groups.
 baseline<- jac_amin %>% 
   filter(taxon1!=taxon2) %>% 
   summarise(non_zero=sum(jaccard_distance_structure!=1)/18589032) %>%

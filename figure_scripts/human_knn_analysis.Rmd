@@ -46,6 +46,7 @@ families %>%
 
 
 ## Analyze the knn performance
+## Supplementary Figure 6 A,B
 ```{r}
 # filter out families with only non-human viruses or where it was difficult to automate host
 families <- families %>% select(-human)
@@ -307,7 +308,7 @@ return(important_df)
 ```
 
 
-## Supplementary Figures 5 B,C,D
+## Supplementary Figures 6 C,D,E
 Looking for human specific clusters here
 ```{r}
 family_of_interest<-c("Anelloviridae")

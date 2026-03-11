@@ -111,7 +111,7 @@ ggplot(knn, aes(x = k, y = accuracy, color = feature)) +
 
 
 
-## Figure 3c: correlating accuracy to the discrepancy between the structural and amino acid distances
+## Figure 3E: correlating accuracy to the discrepancy between the structural and amino acid distances
 ```{r}
 #loading in the dataframe of interest
 within_family<-read_csv("../intermediate_files/family_amino_acid_structure_distance/within_family_dist.csv") %>%
@@ -344,7 +344,7 @@ split <- taxa_guide %>%
   pull(phylum)
 ```
 
-## Figure 2D and Supplementary Figure 3A
+## Figure 2D and Supplementary Figure 3C
 ```{r}
 # with na value
 cols <- rev(brewer.pal(11, "RdBu"))

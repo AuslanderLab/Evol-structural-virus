@@ -11,7 +11,7 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Code for visualizing figure 4c
+# Code for visualizing figure 4D
 The figure comes from the human_spec.py file and is the results saved from
 positve-negative set, where the sets are defined as human prevalent or prevalent in non-human.
 - means present in non-human and + means present in human
@@ -44,7 +44,8 @@ primate_df <- primate_df%>%
   filter(! family %in% filter_virus)
 ```
 
-### Performance the significance testing of phenotypes
+### Performance the significance testing for association of phenotypes
+The intermediate file is generated in human_spec.py
 ```{r}
 feature_vectors<- read_csv("../intermediate_files/significant_hits.csv") %>%
   select(-`143...5`) %>% 
@@ -83,6 +84,7 @@ mat <- data %>%
 # setting the colors
 col <- colorRampPalette(c("#075AFFFF", "white","#FF0000FF"))(29)
 breaks_list <- seq(-1, 1, length.out = 31)
+# added additional significance annotations
 if (!is.null(df))
 {
   df <- df %>%
@@ -363,7 +365,6 @@ for (fam in families)
   distinct() %>%
   select(-species) %>% 
     table()
-  print(tbl)
   print(fam)
   print(fisher.test(tbl))
 }

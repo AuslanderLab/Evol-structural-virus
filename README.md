@@ -13,13 +13,14 @@ Repo structure
 
 Source Data
 -----------
-Data used in this study is linked in our Zenodo: https://zenodo.org/records/17610725, intermediate files were too large to host on github.
-All Zenodo files can be put into the `intermediate_files` dir for downstream analysis
+Data used in this study is linked in our Zenodo: https://zenodo.org/records/17610725. \
+All Zenodo files can be put into the `intermediate_files` dir to replicate downstream analysis. \
 Files from the original database of protein fold clusters is available from the study J.Nomburg *et al.* **Birth of new protein folds and functions in the virome.** *Nature*. (2024) https://zenodo.org/records/10291581
 Following files were used in the intermediate files directory: 
 + `merged_clusters.counts.tsv`
 + `merged_clusters.tax.tsv`
 + `ncbi_viruses_genome_lengths.csv`
+
 
 Running the Analysis
 ---------------------
@@ -50,13 +51,19 @@ Taxonomic labels provided below:
   
 To do classification as done in the manuscript run
 ```
-# family classification for amino acids and structure-based features
+# Family classification for amino acids and structure-based features
 ./src/run_knn.sh ./intermediate_files/amino_acid_knn_df.csv ./intermediate_files/family_species.tsv ./results/knn_result_k_11_amino_acids.csv
+
 ./src/run_knn.sh ./intermediate_files/structure_knn_df.csv  ./intermediate_files/family_species.tsv ./results/knn_result_k_11_structure.csv
-# perform classification for structure-based features at other taxonomic levels
+
+# Perform classification for structure-based features at other taxonomic levels
+
 ./src/run_knn.sh ./intermediate_files/structure_knn_df.csv  ./intermediate_files/genus_species.tsv ./results/knn_result_k_11_structure_genus.csv
+
 ./src/run_knn.sh ./intermediate_files/structure_knn_df.csv  ./intermediate_files/order_species.tsv ./results/knn_result_k_11_structure_order.csv
+
 ./src/run_knn.sh ./intermediate_files/structure_knn_df.csv  ./intermediate_files/class_species.tsv ./results/knn_result_k_11_structure_class.csv
+
 ./src/run_knn.sh ./intermediate_files/structure_knn_df.csv  .intermediate_files/phyla_species.tsv ./results/knn_result_k_11_structure_phyla.csv
 ```
 
@@ -101,23 +108,28 @@ python3 ./src/model_regions.py
 ```
 Outputs are 1) graph with the sequence windows and corresponding AUROC, 2) csv with the beginning of the window coordinate and corresponding AUROC
 
+### Running the family misclassification analysis
+
+
 Running scripts to generate the figures
 ---------------------------------------
 These scripts were used to generate the figures.
 Order of scripts
-+ `panel_1_workflow.Rmd`- Main Figure 1C, Supplementary Figure 1B.
-+ `comparisions.Rmd`-  Main Figure 1A,B,D,E, Supplementary Figures 1A, 1C, 1D, 1E.
-+ `KNN_analysis.Rmd` - Main Figure 2A, Supplementary 2A,B,E,F 7A,B,C,D,E,F,G
-+ `knn_benchmark.Rmd`- Main Figure 2D,E Supplementary Figure 3A,B,C
-+ `robustness_analysis.Rmd`- Main Figure 2B, C Supplementary Figure 2C, D.
-+ `shared_structures_analysis.Rmd`- Main Figure 3A, B, C, Supplementary Figure 4A
++ `panel_1_workflow.Rmd`- Main Figure 1B, Supplementary Figure 1B.
++ `comparisions.Rmd`-  Main Figure 1A,D,E, Supplementary Figures  1A,C, D,E,F,G
++ `KNN_analysis.Rmd` - Main Figure 2A, Supplementary 2A,B,C, 3A,B, 9A,B,C,D,E,F,G
++ `knn_benchmark.Rmd`- Main Figure 2D,E Supplementary Figure 3A,B,C,D,E
++ `robustness_analysis.Rmd`- Main Figure 2B,C Supplementary Figure 2D,E
++ `shared_structures_analysis.Rmd`- Main Figure 3A,B,C, Supplementary Figure 4A
 + `sliding_windows_rep_analysis.Rmd`- Main Figure 4B
-+ `human_enrichment_visualization`- Main Figure 4D
-+ `human_knn_analysis.Rmd`- Main Figure 4E, Supplementary Figures 5B,C,D,7I,J
++ `human_enrichment_visualization`- Main Figure 4D,E, Supplementary Figures 5A,B,C,D,E,F
++ `human_knn_analysis.Rmd`- Supplementary Figures 6A,B,C,D,E, 9,I,H,J
++ `E4_analysis.Rmd` - Main Figure 4G,H, Supplementary Figures 7A,B,C,D
++ `network_analysis.Rmd` - Supplementary Figure 4C, Supplementary Figure 8A,B
 
-Supplementary Figures 4B,6A,B were generated with ITOL, Figures 4C,F and Supplementary Figures 4C,5E,G  was generated in Chimera X and Pymol. Figure 4B and Supplementary Figure 4D,5F was generated in Geneious Prime
+Main Figure 4A and Supplementary Figures 4B were generated with ITOL, Main Figures 4C,F and Supplementary Figures 4D,6F,G,7F,  was generated in Chimera X and Pymol, alignment of E4 is done in `align_E4.pml`. Figure 4B and Supplementary Figure 4E,7E was generated in Geneious Prime
 
 Note on intermediate files
 --------------------------
-All intermediate files are provided in the Zenodo: https://zenodo.org/records/17610725. Descriptions of the intermediate files and how they are generated are in `file_list.txt`.
+All intermediate files are provided in the Zenodo: https://zenodo.org/records/17610725. Descriptions of the intermediate files and how they are generated are in `intermediate_files.txt`.
 

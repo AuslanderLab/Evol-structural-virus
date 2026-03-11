@@ -25,7 +25,7 @@ clust_mem<-read_tsv("../intermediate_files/nomburg_files/merged_clusters.tax.tsv
   
 ```
 
-## Main Figure 1C
+## Main Figure 1B
 ```{r}
 clust_mem %>% ggplot(mapping=aes(x=num_mems))+
   geom_histogram(bins=15, color="black")+

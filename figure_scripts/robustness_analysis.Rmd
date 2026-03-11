@@ -308,7 +308,7 @@ worse_performance<- function(df, benchmark_performance, features, filter)
 }
 
 ```
-Supplementary Figure 2D
+### Supplementary Figure 2E
 ```{r}
 feat_5_clusts_worse<-worse_performance(feat_5_results, benchmark_performance, features_5,2)
 feat_10_clusts_worse<-worse_performance(feat_10_results, benchmark_performance, features_10,5)
@@ -403,7 +403,7 @@ worse_performance %>%
 phyper(110,14698,17447-14698, 140, lower.tail = FALSE)
 ```
 
-## Supplementary Figure 2C: Is robustness correlated with the larger vectors?
+## Supplementary Figure 2D: Is robustness correlated with the larger vectors?
 ```{r}
 options(scipen=9999)
 # count the number of features per family

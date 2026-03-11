@@ -21,7 +21,9 @@ E4_cluster_quality<- read_tsv("../intermediate_files/E4_analysis/E4_plddts.txt",
 E4_cluster_mems<- read_tsv("../intermediate_files/E4_analysis/cluster_mems.tsv",
                            col_names = c("id", "cluster_rep", "cluster_mem"))
 ```
+
 ## Looking at distribution of structure confidence with human and non-human information
+### Supplementary Figure 7B
 ```{r}
 E4_cluster_quality %>% 
   ggplot(mapping = aes(x=plddt, fill=tropism))+
@@ -59,8 +61,8 @@ E4_cluster_mems %>%
   distinct()
 
 ```
-# Looking at the Sequence-based predictions of disorder in the N-terminal region
 
+# Looking at the Sequence-based predictions of disorder in the N-terminal region
 ```{r}
 # all sequence members with cluster ids
 cluster_to_sequence<-read_tsv("../intermediate_files/E4_analysis/cluster_ids_all_members.tsv",
@@ -80,7 +82,7 @@ fldpnn<-read_tsv("../intermediate_files/E4_analysis/E4_fldpnn_results.csv",
                    "acc"
                  ))
 ```
-# Supplementary Figure XXX
+# Supplementary Figure 7C,D
 ```{r}
 plot_scores<-function(df,score)
 {
@@ -101,7 +103,6 @@ df %>%
 ```
 ```{r}
 plot_scores(IUpred_long,"IUPred2A_score")
-plot_scores(IUpred_long, "ANCHOR2_score")
 plot_scores(fldpnn, "score")
 ```
 
@@ -124,7 +125,7 @@ iupred_nterm<- IUpred_long %>%
   left_join(cluster_to_sequence, by="acc") 
 ```
 
-## Main Figure 4G
+## Main Figure 4G,H
 ```{r}
 #fldpnn
 fldpnn_nterm %>%

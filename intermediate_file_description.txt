@@ -1,5 +1,7 @@
 human_knn dir- generated from the human_knn.sh command, results for knn
 robustness_knn dir - generated from the robustness assay, where features were bootstrapped removed in KNN
+high_quality_structure_results dir - a repeat of main findings with only viral encodings thresholded at 50 or 70
+E4 analysis dir - extracted plddt, lengths, cluster sizes, and IDR predictions of E4 proteins
 family_amino_acid_structure_distance- family and the differences in distances (viral structural encodings -amino acid) within and between family members
 nomburg_files- files extracted from original J.A. et al. (2024) paper
 viral_prots_cluster.tsv- MMseqs clustering results for the amino acids in Supplementary Table 5
@@ -34,3 +36,15 @@ human_included_viruses.csv- all viruses that were classified as human tropic bas
 E4_plddts.txt- tsv of the E4 papillomavirus proteins, plddts, and human-tropism
 cluster_size.txt- tsv of the E4 papillomavirus proteins and cluster size
 primate_specific_virus.csv- species names of viruses infecting primates from NCBI virus
+32_154_clust_frequency.csv- virus species along with the 0,1 indicating presence and absense of 32/154 in the genome, with tropism.
+clust_32_analysis/viruses_no_ig_structural_cluster.tsv- viruses with no ig-like domain + taxon id
+clust_32_analysis/viruses_with_structure_ig.tsv- viruses with id like domain and taxon id
+clust_32_analysis/plddt_ig_containing_structures- plddts of ig-like fold structures
+clust_32_analysis/plddt_clust_32_pfam.tsv- the plddts of all folded members of cluster 32taxon id
+clust_32_analysis/clust_acc_id.tsv- the protein of ig-like domains and the corresponding cluster number
+clust_32_analysis/ig_containing_cluster_lines.tsv- the pulled lines from merged.tax.tsv file of lines with ig like domains
+clust_32_analysis/protein_length_ig_containing_str.tsv- the length of the proteins with an ig-like domain
+significant_hits.csv- the count files of viruses containing enriched/not enriched human-infecting clusters
+species_molecule_type.csv- ncbi virus annotations of species and molecule type
+primate_infecting_virus.csv- species with primate tropism
+papilloma_human_prots.tsv- papillomavirus protein to tropism

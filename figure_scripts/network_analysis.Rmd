@@ -70,7 +70,7 @@ make_matrix<-function(ad_df_mat)
 }
 visualize<-function(phylo_obj)
 ```
-## Supplementary Figure 6A
+## Supplementary Figure 8A
 ```{r}
 ad_tree<-make_matrix(ad)
 adeno_family$label <- adeno_family$species
@@ -81,7 +81,7 @@ family_species_meta <- adeno_family %>%
 ggtree(ad_tree) +
   geom_tiplab(size=3)
 ```
-## Supplementary Figure 6B
+## Supplementary Figure 8B
 ```{r}
 cor_tree<-make_matrix(corona)
 corona_family$label <- corona_family$species
@@ -93,7 +93,7 @@ ggtree(cor_tree) +
   geom_tiplab(size=3)
 ```
 
-## Main Figure 4A
+## Supplementary Figure 4C
 Looking into the redondovirus family and it's relation to other species
 ```{r}
 # loading in the non-zero jaccard index species with relationship to redondovirus
